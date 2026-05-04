@@ -42,14 +42,6 @@ Supports:
 - finding a parked vehicle by plate number
 - showing floor-wise availability status
 
-## Env Variables
-
-```env
-PARKING_TOTAL_FLOORS=5
-PARKING_SPOTS_PER_FLOOR=100
-PARKING_HOURLY_RATE=20
-```
-
 ## Edge Cases Handled
 
 - invalid plate number
@@ -66,3 +58,20 @@ PARKING_HOURLY_RATE=20
 - the nearest spot means the first free spot on that floor
 - billing is charged per started hour
 - environment variables were added for flexibility, even though the base problem uses fixed defaults
+
+## Env Variables
+
+```env
+PARKING_TOTAL_FLOORS=5
+PARKING_SPOTS_PER_FLOOR=100
+PARKING_HOURLY_RATE=20
+```
+
+## Commands
+
+- run the application:
+  - `go run ./cmd/garage`
+- build the project:
+  - `go build ./...`
+- run tests:
+  - `go test ./...`

@@ -28,7 +28,7 @@ func NormalizePlate(plate string) string {
 // ValidateFloor validates that the requested floor exists in the garage.
 func ValidateFloor(floor int, totalFloors int) error {
 	if floor < 1 || floor > totalFloors {
-		return fmt.Errorf("invalid floor: %d. Allowed floors are 1-%d", floor, totalFloors)
+		return fmt.Errorf("%w: %d. Allowed floors are 1-%d", ErrInvalidFloor, floor, totalFloors)
 	}
 
 	return nil
@@ -37,7 +37,7 @@ func ValidateFloor(floor int, totalFloors int) error {
 // ValidatePlate validates a normalized plate number against the registered rules.
 func ValidatePlate(plate string, validators []PlateValidator) error {
 	if plate == "" {
-		return fmt.Errorf("plate number is required")
+		return fmt.Errorf("%w", ErrPlateRequired)
 	}
 
 	if len(validators) == 0 {
@@ -50,5 +50,5 @@ func ValidatePlate(plate string, validators []PlateValidator) error {
 		}
 	}
 
-	return fmt.Errorf("invalid plate number: %s. Expected format like GJ06MG9560", plate)
+	return fmt.Errorf("%w: %s. Expected format like GJ06MG9560", ErrInvalidPlate, plate)
 }

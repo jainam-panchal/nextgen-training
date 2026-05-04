@@ -35,7 +35,7 @@ func NewManager(cfg Config, rules []PlateValidator) *GarageManager {
 
 func (gm *GarageManager) Park(plate string, floor int) (*ParkingSpot, error) {
 	if _, exists := gm.registry[plate]; exists {
-		return nil, fmt.Errorf("vehicle %s is already parked", plate)
+		return nil, fmt.Errorf("%w: %s", ErrVehicleAlreadyParked, plate)
 	}
 
 	start := (floor - 1) * gm.Cfg.SpotsPerFloor
@@ -56,13 +56,13 @@ func (gm *GarageManager) Park(plate string, floor int) (*ParkingSpot, error) {
 		}
 	}
 
-	return nil, fmt.Errorf("floor %d is full", floor)
+	return nil, fmt.Errorf("%w: %d", ErrFloorFull, floor)
 }
 
 func (gm *GarageManager) Exit(plate string) (time.Duration, int, error) {
 	index, exists := gm.registry[plate]
 	if !exists {
-		return 0, 0, fmt.Errorf("vehicle %s is not parked", plate)
+		return 0, 0, fmt.Errorf("%w: %s", ErrVehicleNotParked, plate)
 	}
 
 	spot := &gm.spots[index]
@@ -104,7 +104,7 @@ func (gm *GarageManager) Status() string {
 func (gm *GarageManager) Search(plate string) (*ParkingSpot, error) {
 	index, exists := gm.registry[plate]
 	if !exists {
-		return nil, fmt.Errorf("vehicle %s not found", plate)
+		return nil, fmt.Errorf("%w: %s", ErrVehicleNotFound, plate)
 	}
 
 	return &gm.spots[index], nil
