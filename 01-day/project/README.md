@@ -1,4 +1,4 @@
-## Given Problem Statement
+## Problem Statement
 
 Build a CLI-based parking garage management system in Go:
 
@@ -26,3 +26,43 @@ Build a CLI-based parking garage management system in Go:
    Exit:
    "Vehicle MH-12-AB-1234 exited. Duration: 2h 15m. Fee: ₹60"
    Status: "Floor 1: 73/100 available | Floor 2:45/100 available | ..."
+
+## Project Structure
+
+- `cmd/garage/main.go` application entry point
+- `internal/cli` contains command handling and output formatting
+- `internal/garage` contains the parking logic, validation, models, and fee calculation
+
+## Functional Requirements
+
+Supports:
+
+- parking a vehicle on a requested floor
+- exiting a vehicle and calculating the fee
+- finding a parked vehicle by plate number
+- showing floor-wise availability status
+
+## Env Variables
+
+```env
+PARKING_TOTAL_FLOORS=5
+PARKING_SPOTS_PER_FLOOR=100
+PARKING_HOURLY_RATE=20
+```
+
+## Edge Cases Handled
+
+- invalid plate number
+- invalid floor number
+- missing command arguments
+- duplicate vehicle entry
+- floor full on requested floor
+- searching for a vehicle that is not parked
+- exiting a vehicle that is not parked
+
+## Notes
+
+- the vehicle is parked only on the requested floor
+- the nearest spot means the first free spot on that floor
+- billing is charged per started hour
+- environment variables were added for flexibility, even though the base problem uses fixed defaults
