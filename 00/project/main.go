@@ -46,8 +46,26 @@ func main() {
 		"F": handleSearch, // Finds the specific floor and spot location for a plate.
 	}
 
-	fmt.Println("=== GMS ENGINE ONLINE ===")
-	fmt.Println("Usage: <CMD> [ARGS...] (Example: P MH12AB1234 2)")
+	fmt.Println("=== Parking Garage Management System ===")
+	fmt.Println()
+	fmt.Println("Commands:")
+	fmt.Println("  P <plate> <floor>   Park a vehicle on the requested floor")
+	fmt.Println("  E <plate>           Exit a parked vehicle and calculate the fee")
+	fmt.Println("  F <plate>           Find a parked vehicle by plate number")
+	fmt.Println("  S                   Show floor-wise availability summary")
+	fmt.Println("  Q                   Quit the application")
+	fmt.Println()
+	fmt.Println("Examples:")
+	fmt.Println("  P MH12AB1234 2")
+	fmt.Println("  E MH12AB1234")
+	fmt.Println("  F MH12AB1234")
+	fmt.Println("  S")
+	fmt.Println()
+	fmt.Println("Notes:")
+	fmt.Println("  - Plates may be entered with or without spaces/hyphens.")
+	fmt.Println("  - Parking is assigned to the first available spot on the requested floor.")
+	fmt.Println("  - Exit fee is charged at Rs 20 per started hour.")
+	fmt.Println()
 
 	for {
 		fmt.Print("garage> ")
@@ -67,7 +85,7 @@ func main() {
 		args := parts[1:] // Take all other params
 
 		if cmd == "Q" {
-			fmt.Println("Taking the sytem offline.")
+			fmt.Println("Taking the system offline.")
 			break
 		}
 
