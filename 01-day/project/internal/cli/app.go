@@ -1,4 +1,4 @@
-package main
+package cli
 
 import (
 	"bufio"
@@ -10,26 +10,8 @@ import (
 	"jainam-panchal/nextgen-tranining/gms/internal/garage"
 )
 
-func getEnvInt(key string, defaultValue int) int {
-	valStr := os.Getenv(key)
-
-	if val, err := strconv.Atoi(valStr); err == nil {
-		return val
-	}
-
-	return defaultValue
-}
-
-func loadConfig() garage.Config {
-	return garage.Config{
-		TotalFloors:   getEnvInt("PARKING_TOTAL_FLOORS", 5),
-		SpotsPerFloor: getEnvInt("PARKING_SPOTS_PER_FLOOR", 100),
-		HourlyRate:    getEnvInt("PARKING_HOURLY_RATE", 20),
-		TotalSpots:    getEnvInt("PARKING_TOTAL_FLOORS", 5) * getEnvInt("PARKING_SPOTS_PER_FLOOR", 100),
-	}
-}
-
-func main() {
+// Run starts the garage CLI loop.
+func Run() error {
 	cfg := loadConfig()
 
 	rules := []garage.PlateValidator{
@@ -40,10 +22,10 @@ func main() {
 	scanner := bufio.NewScanner(os.Stdin)
 
 	handlers := map[string]commandHandler{
-		"P": handlePark,   // Validates and parks a vehicle on the requested floor.
-		"E": handleExit,   // Process exit, clears the spot, and calculates the fee.
-		"S": handleStatus, // Displays current available spots across all floors.
-		"F": handleSearch, // Finds the specific floor and spot location for a plate.
+		"P": handlePark,
+		"E": handleExit,
+		"S": handleStatus,
+		"F": handleSearch,
 	}
 
 	fmt.Println("=== Parking Garage Management System ===")
@@ -71,7 +53,7 @@ func main() {
 		fmt.Print("garage> ")
 
 		if !scanner.Scan() {
-			break
+			return scanner.Err()
 		}
 
 		line := strings.TrimSpace(scanner.Text())
@@ -81,18 +63,41 @@ func main() {
 
 		parts := strings.Fields(line)
 		cmd := strings.ToUpper(parts[0])
-
-		args := parts[1:] // Take all other params
+		args := parts[1:]
 
 		if cmd == "Q" {
 			fmt.Println("Taking the system offline.")
-			break
+			return nil
 		}
 
-		if handler, exits := handlers[cmd]; exits {
-			handler(manager, args...) // the variadic call
-		} else {
-			fmt.Printf("Unknown command: %s. Available: P, E, S, F, Q\n", cmd)
+		if handler, exists := handlers[cmd]; exists {
+			handler(manager, args...)
+			continue
 		}
+
+		fmt.Printf("Unknown command: %s. Available: P, E, S, F, Q\n", cmd)
+	}
+}
+
+func getEnvInt(key string, defaultValue int) int {
+	valStr := os.Getenv(key)
+
+	val, err := strconv.Atoi(valStr)
+	if err == nil {
+		return val
+	}
+
+	return defaultValue
+}
+
+func loadConfig() garage.Config {
+	totalFloors := getEnvInt("PARKING_TOTAL_FLOORS", 5)
+	spotsPerFloor := getEnvInt("PARKING_SPOTS_PER_FLOOR", 100)
+
+	return garage.Config{
+		TotalFloors:   totalFloors,
+		SpotsPerFloor: spotsPerFloor,
+		HourlyRate:    getEnvInt("PARKING_HOURLY_RATE", 20),
+		TotalSpots:    totalFloors * spotsPerFloor,
 	}
 }

@@ -6,15 +6,17 @@ import (
 	"strings"
 )
 
+// PlateValidator checks whether a normalized plate number is valid.
 type PlateValidator func(string) bool
 
-// Indian Number Plates
 var reIndia = regexp.MustCompile(`^[A-Z]{2}[0-9]{2}[A-Z]{1,2}[0-9]{4}$`)
 
+// IndiaValidator validates normalized Indian vehicle registration numbers.
 func IndiaValidator(plate string) bool {
 	return reIndia.MatchString(plate)
 }
 
+// NormalizePlate converts a plate into the canonical format used by the garage.
 func NormalizePlate(plate string) string {
 	plate = strings.TrimSpace(plate)
 	plate = strings.ToUpper(plate)
@@ -23,6 +25,7 @@ func NormalizePlate(plate string) string {
 	return plate
 }
 
+// ValidateFloor validates that the requested floor exists in the garage.
 func ValidateFloor(floor int, totalFloors int) error {
 	if floor < 1 || floor > totalFloors {
 		return fmt.Errorf("invalid floor: %d. Allowed floors are 1-%d", floor, totalFloors)
@@ -31,6 +34,7 @@ func ValidateFloor(floor int, totalFloors int) error {
 	return nil
 }
 
+// ValidatePlate validates a normalized plate number against the registered rules.
 func ValidatePlate(plate string, validators []PlateValidator) error {
 	if plate == "" {
 		return fmt.Errorf("plate number is required")
@@ -46,5 +50,5 @@ func ValidatePlate(plate string, validators []PlateValidator) error {
 		}
 	}
 
-	return fmt.Errorf("invalid plate number: %s", plate)
+	return fmt.Errorf("invalid plate number: %s. Expected format like GJ06MG9560", plate)
 }

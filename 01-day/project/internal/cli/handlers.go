@@ -1,9 +1,8 @@
-package main
+package cli
 
 import (
 	"fmt"
 	"strconv"
-	"time"
 
 	"jainam-panchal/nextgen-tranining/gms/internal/garage"
 )
@@ -91,28 +90,4 @@ func handleSearch(m *garage.GarageManager, args ...string) {
 	}
 
 	fmt.Printf("Vehicle %s is parked at Floor %d, Spot %d\n", plate, spot.Floor, spot.ID)
-}
-
-func formatDuration(duration time.Duration) string {
-	totalSeconds := int(duration.Seconds())
-
-	hours := totalSeconds / 3600
-	minutes := (totalSeconds % 3600) / 60
-	seconds := totalSeconds % 60
-
-	if hours > 0 {
-		if seconds > 0 {
-			return fmt.Sprintf("%dh %dm %ds", hours, minutes, seconds)
-		}
-		return fmt.Sprintf("%dh %dm", hours, minutes)
-	}
-
-	if minutes > 0 {
-		if seconds > 0 {
-			return fmt.Sprintf("%dm %ds", minutes, seconds)
-		}
-		return fmt.Sprintf("%dm", minutes)
-	}
-
-	return fmt.Sprintf("%ds", seconds)
 }
