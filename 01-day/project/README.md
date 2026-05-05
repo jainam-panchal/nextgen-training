@@ -75,3 +75,13 @@ PARKING_HOURLY_RATE=20
   - `go build ./...`
 - run tests:
   - `go test ./...`
+
+## Alternate Approach
+
+- Sorted free-list: Keep all free spots of a floor in sorted order. The nearest free spot is always the first one in the list. Parking is simple because we take the first free spot, and
+  this can be treated as `O(1)` if we move the slice forward. Exit is slower because the freed spot has to be added back in the correct sorted position, which is `O(k)` in the worst case
+  because elements may need to shift.
+- Min-heap: Keep free spots in a heap where the smallest free spot is always on top. Parking removes the smallest spot in `O(log k)`, and exit adds the freed spot back in `O(log k)`. This
+  gives better balanced performance for both park and exit.
+ 
+Note: (k = number of free spots or spots on that floor)
