@@ -27,3 +27,31 @@ Build a stock price tracking system in Go:
 - Use struct with methods (not free functions)
 - Implement Stringer interface for display
 - Handle edge cases: empty history, single data point
+
+## Approximate Memory Usage
+
+These numbers are approximate for a 64-bit Go runtime.
+
+- `PricePoint` uses about **40 bytes**
+- `StockTracker` struct itself uses about **80 bytes**
+- most memory is used by the `Window` slice, because it stores recent `PricePoint` values
+
+## Memory By Window Size
+
+The `Window` slice grows based on how many recent price points are stored.
+
+- window size `10`  -> about **400 bytes**
+- window size `100` -> about **4000 bytes** (~4 KB)
+- window size `500` -> about **20000 bytes** (~20 KB)
+
+So one tracker at window size `100` uses roughly:
+
+- tracker struct: **80 bytes**
+- window data: **4000 bytes**
+- total: about **4080 bytes**
+
+For 5 stocks at window size `100`, total tracker data is about:
+
+- **20400 bytes** (~20 KB)
+
+The `Window` slice starts with capacity `10` and grows with `append()`. When old points are removed, the active window gets smaller, but the old backing array may still stay in memory. That is why the project also uses manual shrink logic.
