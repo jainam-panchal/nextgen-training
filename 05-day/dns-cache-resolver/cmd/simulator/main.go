@@ -2,12 +2,13 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"time"
+
 	cachestore "dns-cache-resolver/internal/cache_store"
 	dnsrecord "dns-cache-resolver/internal/dns_record"
 	"dns-cache-resolver/internal/resolver"
 	stream "dns-cache-resolver/internal/upstream"
-	"fmt"
-	"time"
 )
 
 func main() {
@@ -29,7 +30,7 @@ func main() {
 	upstream = stream.NewDummyUpstreamResolver()
 
 	r := resolver.NewResolver(store, upstream)
-	r.StartCleanup(ctx, 10*time.Second)
+	r.StartCleanup(ctx, 30*time.Second)
 
 	ip, err := r.Resolve("example.com")
 	if err != nil {
@@ -37,11 +38,23 @@ func main() {
 		return
 	}
 
-	fmt.Println("example.com", ip)
+	fmt.Println("example.com ->", ip)
+
+	if err := r.AddRecord("*.example.com", "203.0.113.42", 45*time.Second); err != nil {
+		fmt.Println("add record error:", err)
+		return
+	}
+
+	ip, err = r.Resolve("sub.example.com")
+	if err != nil {
+		fmt.Println("resolve error:", err)
+		return
+	}
+	fmt.Println("sub.example.com ->", ip)
 
 	stats := r.Stats()
 
-	fmt.Printf("hits=%d misses=%d entries=%d hit_rate=%.2f miss_rate=%.2f mem_est=%d\n",
+	fmt.Printf("stats: hits=%d misses=%d entries=%d hit_rate=%.2f miss_rate=%.2f mem_est=%d\n",
 		stats.Hits, stats.Misses, stats.TotalEntries, stats.HitRate, stats.MissRate,
 		stats.MemoryEstimate)
 

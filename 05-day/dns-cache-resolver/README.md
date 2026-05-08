@@ -1,43 +1,85 @@
-## problem statement
+# DNS Cache Resolver (Day 5)
 
-Requirements:
-Build a DNS cache resolver in Go:
+## Run
 
-1. STRUCTURE:
+```bash
+go run ./cmd/simulator
+go test ./...
+go test -bench=BenchmarkResolve -benchmem ./internal/resolver
+```
 
-- Implement your OWN hash map from scratch first (don't use Go's built-
-  in map)
-- Custom hash function for strings (e.g., FNV-1a or djb2)
-- Bucket array with chaining (linked list per bucket)
-- Dynamic resizing when load factor > 0.75
-- DNSRecord: { Domain, IP, TTL time.Duration, CreatedAt time.Time,
-  HitCount int }
+## What is implemented
 
-2. CORE FEATURES:- Resolve(domain) → IP: check cache first, simulate upstream lookup if
-   miss
+- Custom hash map store with:
+- FNV-1a string hash
+- bucket array + chaining (linked list per bucket)
+- resize when load factor exceeds `0.75`
+- Built-in map store for comparison
+- DNS resolver with:
+- cache-first resolve
+- upstream fallback
+- wildcard lookup (`*.example.com`)
+- lazy TTL expiration on lookup
+- periodic cleanup (`time.Ticker`)
+- cache stats (hits/misses/rates/entry count/memory estimate)
+- `AddRecord(domain, ip, ttl)` API
+- JSON tags on `DNSRecord`
 
-- AddRecord(domain, ip, ttl): insert with expiration
-- Eviction: remove expired entries (TTL-based)
-- Cache stats: hit rate, miss rate, total entries, memory estimate
-- Wildcard matching: \*.example.com should match sub.example.com
+## Notes
 
-3. AFTER CUSTOM IMPLEMENTATION:
+- Higher cache `HitCount` means the record was returned from cache more often.
+- Wildcard lookup is fallback only; exact domain lookup is attempted first.
+- Cleanup runs in background every configured interval (simulator uses 30s).
 
-- Re-implement using Go's built-in map[string]\*DNSRecord
-- Benchmark both: go test -bench=BenchmarkResolve -benchmem
-- Compare: ops/sec, memory per entry, resize behavior
+## Benchmarks
 
-4. GO REQUIREMENTS:
+Run:
 
-- Implement the hash function — explain why you chose it
-- Handle hash collisions — demonstrate with intentionally colliding
-  keys
-- Use time.Ticker for periodic TTL cleanup goroutine (preview
-  concurrency)
-- JSON struct tags for serialization
+  ```bash
+  go test -bench=BenchmarkResolve -benchmem ./internal/resolver
 
-5. TTL IMPLEMENTATION:
+  Output:
+  goos: linux
+  goarch: amd64
+  pkg: dns-cache-resolver/internal/resolver
+  cpu: 11th Gen Intel(R) Core(TM) i7-11850H @ 2.50GHz
+  BenchmarkResolve/CustomMapStore/n=100-16                 8388062               135.6 ns/op             0 B/op          0 allocs/op
+  BenchmarkResolve/InbuiltMapStore/n=100-16               10446400               113.3 ns/op             0 B/op          0 allocs/op
+  BenchmarkResolve/CustomMapStore/n=1000-16                7679671               144.2 ns/op             0 B/op          0 allocs/op
+  BenchmarkResolve/InbuiltMapStore/n=1000-16               9482930               124.3 ns/op             0 B/op          0 allocs/op
+  BenchmarkResolve/CustomMapStore/n=10000-16               7347439               155.9 ns/op             0 B/op          0 allocs/op
+  BenchmarkResolve/InbuiltMapStore/n=10000-16              8742204               133.3 ns/op             0 B/op          0 allocs/op
+  BenchmarkResolve/CustomMapStore/n=100000-16              5815402               213.8 ns/op             0 B/op          0 allocs/op
+  BenchmarkResolve/InbuiltMapStore/n=100000-16             7582772               160.9 ns/op             0 B/op          0 allocs/op
+  BenchmarkResolve/CustomMapStore/n=500000-16              3411124               337.7 ns/op             0 B/op          0 allocs/op
+  BenchmarkResolve/InbuiltMapStore/n=500000-16             3722890               321.1 ns/op             0 B/op          0 allocs/op
+  BenchmarkResolve/CustomMapStore/n=1000000-16             3343378               361.3 ns/op             0 B/op          0 allocs/op
+  BenchmarkResolve/InbuiltMapStore/n=1000000-16            3151083               387.8 ns/op             0 B/op          0 allocs/op
+  PASS
+  ok      dns-cache-resolver/internal/resolver    31.917s
+```
 
-- Each record expires after its TTL
-- Background cleanup every 30 seconds removes expired entries
-- Lazy expiration: also check on lookup
+  Short interpretation:
+
+  - Built-in map is faster from n=100 to n=500000.
+  - At n=1000000, custom map is slightly faster in this run (361.3 ns/op vs 387.8 ns/op).
+  - Both implementations show 0 B/op and 0 allocs/op on this hot-cache resolve path.
+
+
+What to compare:
+
+- `CustomMapStore` vs `InbuiltMapStore`
+- `ns/op` for throughput
+- `B/op` for bytes allocated
+- `allocs/op` for allocation count
+
+## Collision handling proof
+
+Collision-chain behavior is validated in:
+
+- `internal/cache_store/custom_cache_store_test.go`
+
+It intentionally finds colliding keys for the same bucket and confirms that:
+
+- deleting one key does not remove the other collided entry
+- chain integrity is preserved
