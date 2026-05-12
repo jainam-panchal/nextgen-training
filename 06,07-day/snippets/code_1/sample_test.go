@@ -2,16 +2,24 @@ package main
 
 import "testing"
 
-func assertEqual(t *testing.T, got, want int) {
-	t.Helper()
-
+func failWithoutHelper(t *testing.T, got int, want int) {
 	if got != want {
-		t.Fatalf("got %d, want %d", got, want)
+		t.Fatalf("without helper: got %d, want %d", got, want)
 	}
 }
 
-func TestAdd(t *testing.T) {
-	result := 2 + 2
+func failWithHelper(t *testing.T, got int, want int) {
+	t.Helper()
 
-	assertEqual(t, result, 5)
+	if got != want {
+		t.Fatalf("with helper: got %d, want %d", got, want)
+	}
+}
+
+func TestWithoutHelper(t *testing.T) {
+	failWithoutHelper(t, 1, 2)
+}
+
+func TestWithHelper(t *testing.T) {
+	failWithHelper(t, 1, 2)
 }

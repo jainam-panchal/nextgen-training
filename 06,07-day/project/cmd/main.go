@@ -33,7 +33,7 @@ func main() {
 
 	newDriver := &models.Driver{
 		ID:       models.NewDriverID(),
-		Name:     "Amit",
+		Name:     "Jainam",
 		Location: models.Location{Lat: 19.0760, Lng: 72.8777},
 		Status:   models.DriverOffline,
 		Rating:   4.8,

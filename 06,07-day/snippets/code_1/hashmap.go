@@ -1,9 +1,5 @@
 package main
 
-import (
-	"sync"
-)
-
 type HashMap interface {
 	Set(key string, value int)
 	Get(key string) (int, bool)
@@ -12,7 +8,6 @@ type HashMap interface {
 }
 
 type BuiltinMap struct {
-	mutex sync.RWMutex
 	items map[string]int
 }
 
@@ -23,31 +18,19 @@ func NewBuiltinMap() *BuiltinMap {
 }
 
 func (hashMap *BuiltinMap) Set(key string, value int) {
-	hashMap.mutex.Lock()
-	defer hashMap.mutex.Unlock()
-
 	hashMap.items[key] = value
 }
 
 func (hashMap *BuiltinMap) Get(key string) (int, bool) {
-	hashMap.mutex.RLock()
-	defer hashMap.mutex.RUnlock()
-
 	value, exists := hashMap.items[key]
 	return value, exists
 }
 
 func (hashMap *BuiltinMap) Delete(key string) {
-	hashMap.mutex.Lock()
-	defer hashMap.mutex.Unlock()
-
 	delete(hashMap.items, key)
 }
 
 func (hashMap *BuiltinMap) Len() int {
-	hashMap.mutex.RLock()
-	defer hashMap.mutex.RUnlock()
-
 	return len(hashMap.items)
 }
 

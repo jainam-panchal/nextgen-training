@@ -2,17 +2,27 @@ goos: linux
 goarch: amd64
 pkg: nextgen
 cpu: 11th Gen Intel(R) Core(TM) i7-11850H @ 2.50GHz
-BenchmarkBuiltinMapBuild-16                    	       1	4061873361 ns/op	894701784 B/op	   65564 allocs/op
-BenchmarkShardedBuiltinMapBuild-16             	       1	5805512904 ns/op	894729088 B/op	   66241 allocs/op
-BenchmarkBuiltinMapGet-16                      	 7099758	       272.4 ns/op	       0 B/op	       0 allocs/op
-BenchmarkShardedBuiltinMapGet-16               	 4254224	       335.3 ns/op	       0 B/op	       0 allocs/op
-BenchmarkBuiltinMapDelete-16                   	       1	5348251242 ns/op	  10000000 keys/op	1040014912 B/op	49999772 allocs/op
-BenchmarkShardedBuiltinMapDelete-16            	       1	4985102560 ns/op	  10000000 keys/op	1040014560 B/op	49999769 allocs/op
-BenchmarkShardedBuiltinMapParallelGet-16       	41615803	        30.07 ns/op	       0 B/op	       0 allocs/op
-BenchmarkBuiltinMapParallelGet-16              	15049780	        78.53 ns/op	       0 B/op	       0 allocs/op
-BenchmarkBuiltinMapParallelSet-16              	 5455725	       228.4 ns/op	       5 B/op	       0 allocs/op
-BenchmarkShardedBuiltinMapParallelSet-16       	19015147	        68.47 ns/op	       5 B/op	       0 allocs/op
-BenchmarkBuiltinMapParallelDelete-16           	 4889085	       255.6 ns/op	       0 B/op	       0 allocs/op
-BenchmarkShardedBuiltinMapParallelDelete-16    	22997886	        51.74 ns/op	       0 B/op	       0 allocs/op
-PASS
-ok  	nextgen	263.889s
+BenchmarkBuiltinMapBuild-16                    	       1	2842361700 ns/op	894701496 B/op	   65561 allocs/op
+BenchmarkShardedBuiltinMapBuild-16             	       1	3085251199 ns/op	894727936 B/op	   66240 allocs/op
+BenchmarkBuiltinMapGet-16                      	15151046	        95.71 ns/op	       0 B/op	       0 allocs/op
+BenchmarkShardedBuiltinMapGet-16               	 7105278	       200.0 ns/op	       0 B/op	       0 allocs/op
+BenchmarkBuiltinMapDelete-16                   	       1	3457474181 ns/op	  10000000 keys/op	1040014288 B/op	49999765 allocs/op
+BenchmarkShardedBuiltinMapDelete-16            	       1	4250756952 ns/op	  10000000 keys/op	1040014304 B/op	49999765 allocs/op
+BenchmarkShardedBuiltinMapParallelGet-16       	57070333	        23.34 ns/op	       0 B/op	       0 allocs/op
+BenchmarkBuiltinMapParallelGet-16              	100000000	        12.96 ns/op	       0 B/op	       0 allocs/op
+BenchmarkBuiltinMapParallelSet-16              	fatal error: concurrent map writes
+
+goroutine 278 [running]:
+internal/runtime/maps.fatal({0x58d269?, 0x433f3c?})
+	/usr/local/go/src/runtime/panic.go:1181 +0x18
+nextgen.(*BuiltinMap).Set(...)
+	/home/jainam-panchal/repos/nextgen-training/06,07-day/snippets/code_1/hashmap.go:21
+nextgen.BenchmarkBuiltinMapParallelSet.func1(0x1f1d9206c020)
+	/home/jainam-panchal/repos/nextgen-training/06,07-day/snippets/code_1/hashmap_bench_test.go:245 +0xc5
+testing.(*B).RunParallel.func1()
+	/usr/local/go/src/testing/benchmark.go:982 +0xb8
+created by testing.(*B).RunParallel in goroutine 341
+	/usr/local/go/src/testing/benchmark.go:975 +0x116
+exit status 2
+FAIL	nextgen	137.165s
+FAIL
