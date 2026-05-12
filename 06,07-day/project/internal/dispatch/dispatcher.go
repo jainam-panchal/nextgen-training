@@ -1,6 +1,7 @@
 package dispatch
 
 import (
+	"sort"
 	"sync"
 	"time"
 
@@ -59,6 +60,10 @@ func (d *Dispatcher) RequestRide(
 	}
 
 	if pickup == dropoff {
+		return nil, appErrors.ErrInvalidRideRequest
+	}
+
+	if requestTime.After(time.Now()) {
 		return nil, appErrors.ErrInvalidRideRequest
 	}
 
@@ -169,22 +174,31 @@ func (d *Dispatcher) CompleteRide(rideID string, completedAt time.Time) (*models
 		return nil, err
 	}
 
+	originalStatus := ride.Status
+	originalEndTime := ride.EndTime
+
 	ride.Status = models.RideCompleted
 	ride.EndTime = completedAt
 
 	if err := d.rideHistory.Save(ride); err != nil {
+		ride.Status = originalStatus
+		ride.EndTime = originalEndTime
+		_ = d.activeRides.Add(ride)
 		return nil, err
 	}
 
 	if err := d.driverStore.UpdateLocation(ride.DriverID, ride.Dropoff); err != nil {
+		_ = d.driverStore.Release(ride.DriverID)
 		return nil, err
 	}
 
 	if err := d.driverStore.AddRideToHistory(ride.DriverID, ride.ID); err != nil {
+		_ = d.driverStore.Release(ride.DriverID)
 		return nil, err
 	}
 
 	if err := d.riderStore.AddRideToHistory(ride.RiderID, ride.ID); err != nil {
+		_ = d.driverStore.Release(ride.DriverID)
 		return nil, err
 	}
 
@@ -270,7 +284,12 @@ func (d *Dispatcher) AverageWaitTime() time.Duration {
 			continue
 		}
 
-		totalWait += ride.StartTime.Sub(ride.RequestTime)
+		wait := ride.StartTime.Sub(ride.RequestTime)
+		if wait < 0 {
+			continue
+		}
+
+		totalWait += wait
 		completedRideCount++
 	}
 
@@ -313,4 +332,51 @@ func (d *Dispatcher) driverEarningsSince(
 	}
 
 	return earnings
+}
+
+func (d *Dispatcher) BusiestZones(limit int) []models.ZoneRequestCount {
+	if limit <= 0 {
+		return []models.ZoneRequestCount{}
+	}
+
+	requests := d.requestQueue.Snapshot()
+	if len(requests) == 0 {
+		return []models.ZoneRequestCount{}
+	}
+
+	countByBlock := make(map[models.BlockID]int)
+	for _, request := range requests {
+		if request == nil {
+			continue
+		}
+
+		block := geo.GetBlockID(request.Pickup, d.cfg.CellSizeDegrees)
+		countByBlock[block]++
+	}
+
+	zoneCounts := make([]models.ZoneRequestCount, 0, len(countByBlock))
+	for block, count := range countByBlock {
+		zoneCounts = append(zoneCounts, models.ZoneRequestCount{
+			BlockID: block,
+			Count:   count,
+		})
+	}
+
+	// Sort by highest request count first; use block coordinates
+	sort.Slice(zoneCounts, func(i, j int) bool {
+		if zoneCounts[i].Count == zoneCounts[j].Count {
+			left := zoneCounts[i].BlockID
+			right := zoneCounts[j].BlockID
+			return left.LatBucket < right.LatBucket ||
+				(left.LatBucket == right.LatBucket && left.LngBucket < right.LngBucket)
+		}
+
+		return zoneCounts[i].Count > zoneCounts[j].Count
+	})
+
+	if limit > len(zoneCounts) {
+		limit = len(zoneCounts)
+	}
+
+	return zoneCounts[:limit]
 }

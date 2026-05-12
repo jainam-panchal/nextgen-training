@@ -124,7 +124,7 @@ func IsValidRide(ride *Ride) bool {
 		return false
 	}
 
-	if strings.TrimSpace(ride.DriverID) == "" {
+	if ride.Status != RideCancelled && strings.TrimSpace(ride.DriverID) == "" {
 		return false
 	}
 

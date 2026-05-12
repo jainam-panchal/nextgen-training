@@ -59,6 +59,12 @@ func (h *MinHeap[T]) IsEmpty() bool {
 	return len(h.items) == 0
 }
 
+func (h *MinHeap[T]) Items() []T {
+	itemsCopy := make([]T, len(h.items))
+	copy(itemsCopy, h.items)
+	return itemsCopy
+}
+
 func (h *MinHeap[T]) heapifyUp(index int) {
 	for index > 0 {
 		parentIndex := getParentIndex(index)

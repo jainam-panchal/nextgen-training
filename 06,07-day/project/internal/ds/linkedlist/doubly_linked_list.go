@@ -75,6 +75,10 @@ func (l *DoublyLinkedList[T]) Remove(node *Node[T]) (T, error) {
 		return zero, appErrors.ErrEmptyLinkedList
 	}
 
+	if !l.containsNode(node) {
+		return zero, appErrors.ErrInvalidLinkedListNode
+	}
+
 	if node.prev != nil {
 		node.prev.next = node.next
 	} else {
@@ -95,6 +99,16 @@ func (l *DoublyLinkedList[T]) Remove(node *Node[T]) (T, error) {
 	node.next = nil
 
 	return removedValue, nil
+}
+
+func (l *DoublyLinkedList[T]) containsNode(target *Node[T]) bool {
+	for currentNode := l.head; currentNode != nil; currentNode = currentNode.next {
+		if currentNode == target {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (l *DoublyLinkedList[T]) Values() []T {

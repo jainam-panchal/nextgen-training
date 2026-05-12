@@ -240,8 +240,13 @@ func (s *MemoryStore) FindNearestAvailable(
 		for _, driver := range s.availableDriversByBlock[block] {
 			distanceKm := geo.DistanceKm(loc, driver.Location)
 
-			if distanceKm <= maxDistanceKm &&
-				(nearestDriver == nil || distanceKm < nearestDistanceKm) {
+			if distanceKm > maxDistanceKm {
+				continue
+			}
+
+			if nearestDriver == nil ||
+				distanceKm < nearestDistanceKm ||
+				(distanceKm == nearestDistanceKm && driver.ID < nearestDriver.ID) {
 				nearestDriver = driver
 				nearestDistanceKm = distanceKm
 			}
@@ -303,6 +308,10 @@ func (s *MemoryStore) FindNNearestAvailable(
 	}
 
 	sort.Slice(candidates, func(i, j int) bool {
+		if candidates[i].distanceKm == candidates[j].distanceKm {
+			return candidates[i].driver.ID < candidates[j].driver.ID
+		}
+
 		return candidates[i].distanceKm < candidates[j].distanceKm
 	})
 

@@ -51,6 +51,13 @@ func (q *RideRequestPriorityQueue) Pop() (*models.RideRequest, error) {
 	return q.requests.Pop()
 }
 
+func (q *RideRequestPriorityQueue) Snapshot() []*models.RideRequest {
+	q.mu.RLock()
+	defer q.mu.RUnlock()
+
+	return q.requests.Items()
+}
+
 func (q *RideRequestPriorityQueue) Len() int {
 	q.mu.RLock()
 	defer q.mu.RUnlock()
