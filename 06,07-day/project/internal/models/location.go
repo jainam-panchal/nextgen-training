@@ -9,3 +9,8 @@ type BlockID struct {
 	LatBucket int
 	LngBucket int
 }
+
+type ZoneRequestCount struct {
+	BlockID BlockID
+	Count   int
+}

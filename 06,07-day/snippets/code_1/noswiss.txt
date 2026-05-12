@@ -1,0 +1,18 @@
+goos: linux
+goarch: amd64
+pkg: nextgen
+cpu: 11th Gen Intel(R) Core(TM) i7-11850H @ 2.50GHz
+BenchmarkBuiltinMapBuild-16                    	       1	3474303033 ns/op	990890024 B/op	  307348 allocs/op
+BenchmarkShardedBuiltinMapBuild-16             	       1	3959895977 ns/op	990796704 B/op	  304875 allocs/op
+BenchmarkBuiltinMapGet-16                      	13576512	       110.6 ns/op	       0 B/op	       0 allocs/op
+BenchmarkShardedBuiltinMapGet-16               	 7567881	       198.1 ns/op	       0 B/op	       0 allocs/op
+BenchmarkBuiltinMapDelete-16                   	       1	4476069551 ns/op	  10000000 keys/op	1040017096 B/op	49999773 allocs/op
+BenchmarkShardedBuiltinMapDelete-16            	       1	5377116572 ns/op	  10000000 keys/op	1040014720 B/op	49999770 allocs/op
+BenchmarkShardedBuiltinMapParallelGet-16       	45799538	        25.92 ns/op	       0 B/op	       0 allocs/op
+BenchmarkBuiltinMapParallelGet-16              	16221524	        79.51 ns/op	       0 B/op	       0 allocs/op
+BenchmarkBuiltinMapParallelSet-16              	 4489674	       240.0 ns/op	       6 B/op	       0 allocs/op
+BenchmarkShardedBuiltinMapParallelSet-16       	17446216	        71.96 ns/op	       7 B/op	       0 allocs/op
+BenchmarkBuiltinMapParallelDelete-16           	 3685570	       373.7 ns/op	       0 B/op	       0 allocs/op
+BenchmarkShardedBuiltinMapParallelDelete-16    	20762924	        62.40 ns/op	       0 B/op	       0 allocs/op
+PASS
+ok  	nextgen	304.727s
