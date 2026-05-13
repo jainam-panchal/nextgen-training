@@ -22,22 +22,32 @@ import (
 var concurrentSink uint64
 
 const (
-	keyPrefix      = "key-"
-	defaultKeySize = 25
-	defaultShards  = 32
+	keyPrefix     = "key-"
+	defaultShards = 32
 
 	// Old scale set:
 	// concurrencyScale1 = 1_000
 	// concurrencyScale2 = 10_000
 	// concurrencyScale3 = 100_000
 	//
-	// New lighter scale set (faster iteration while still showing trends):
+	// Expanded scale set:
 	concurrencyScale1 = 500
 	concurrencyScale2 = 5_000
 	concurrencyScale3 = 50_000
+	concurrencyScale4 = 100_000
+	concurrencyScale5 = 500_000
+	concurrencyScale6 = 1_000_000
 )
 
-var concurrencyScales = []int{concurrencyScale1, concurrencyScale2, concurrencyScale3}
+var concurrencyScales = []int{
+	concurrencyScale1,
+	concurrencyScale2,
+	concurrencyScale3,
+	concurrencyScale4,
+	concurrencyScale5,
+	concurrencyScale6,
+}
+var concurrentKeySizes = []int{16, 32, 64, 128, 256}
 
 func makeBenchmarkKeys(count int, keySizeBytes int, prefix string) []string {
 	const indexWidth = 9
@@ -57,42 +67,47 @@ func makeBenchmarkKeys(count int, keySizeBytes int, prefix string) []string {
 
 func BenchmarkConcurrentMapReadHeavy(b *testing.B) {
 	for _, n := range concurrencyScales {
-		keys := makeBenchmarkKeys(n, defaultKeySize, keyPrefix)
+		for _, keySize := range concurrentKeySizes {
+			keys := makeBenchmarkKeys(n, keySize, keyPrefix)
 
-		benchmarks := []struct {
-			name string
-			new  func() ConcurrentMap
-		}{
-			{name: "LockedBuiltinMap", new: func() ConcurrentMap { return NewLockedBuiltinMap() }},
-			{name: fmt.Sprintf("LockedShardedBuiltinMap/shards=%d", defaultShards), new: func() ConcurrentMap { return NewLockedShardedBuiltinMap(defaultShards) }},
-			{name: "SyncMap", new: func() ConcurrentMap { return NewSyncMapAdapter() }},
-		}
+			benchmarks := []struct {
+				name string
+				new  func() ConcurrentMap
+			}{
+				{name: "LockedBuiltinMap", new: func() ConcurrentMap { return NewLockedBuiltinMap() }},
+				{name: fmt.Sprintf("LockedShardedBuiltinMap/shards=%d", defaultShards), new: func() ConcurrentMap { return NewLockedShardedBuiltinMap(defaultShards) }},
+				{name: "SyncMap", new: func() ConcurrentMap { return NewSyncMapAdapter() }},
+			}
 
-		for _, bm := range benchmarks {
-			b.Run(fmt.Sprintf("%s/n=%d", bm.name, n), func(b *testing.B) {
-				hashMap := bm.new()
-				for keyIndex, key := range keys {
-					hashMap.Set(key, keyIndex)
-				}
-
-				b.ReportAllocs()
-				b.ReportMetric(float64(n), "keys/op")
-				b.ResetTimer()
-
-				b.RunParallel(func(pb *testing.PB) {
-					keyIndex := 0
-					localSum := 0
-					for pb.Next() {
-						value, _ := hashMap.Get(keys[keyIndex])
-						localSum += value
-						keyIndex++
-						if keyIndex == len(keys) {
-							keyIndex = 0
-						}
+			for _, bm := range benchmarks {
+				b.Run(fmt.Sprintf("%s/n=%d/keysize=%d", bm.name, n, keySize), func(b *testing.B) {
+					hashMap := bm.new()
+					for keyIndex, key := range keys {
+						hashMap.Set(key, keyIndex)
 					}
-					atomic.AddUint64(&concurrentSink, uint64(localSum))
+
+					b.ReportAllocs()
+					b.ReportMetric(float64(n), "keys/op")
+					b.ReportMetric(float64(keySize), "key_size_bytes")
+					b.ResetTimer()
+
+					var workerCounter atomic.Uint64
+					b.RunParallel(func(pb *testing.PB) {
+						workerID := int(workerCounter.Add(1))
+						keyIndex := workerID % len(keys)
+						localSum := 0
+						for pb.Next() {
+							value, _ := hashMap.Get(keys[keyIndex])
+							localSum += value
+							keyIndex += 17
+							if keyIndex >= len(keys) {
+								keyIndex %= len(keys)
+							}
+						}
+						atomic.AddUint64(&concurrentSink, uint64(localSum))
+					})
 				})
-			})
+			}
 		}
 	}
 }
@@ -100,36 +115,41 @@ func BenchmarkConcurrentMapReadHeavy(b *testing.B) {
 // Measures concurrent write-only behavior to expose lock contention and write overhead.
 func BenchmarkConcurrentMapWriteHeavy(b *testing.B) {
 	for _, n := range concurrencyScales {
-		keys := makeBenchmarkKeys(n, defaultKeySize, keyPrefix)
+		for _, keySize := range concurrentKeySizes {
+			keys := makeBenchmarkKeys(n, keySize, keyPrefix)
 
-		benchmarks := []struct {
-			name string
-			new  func() ConcurrentMap
-		}{
-			{name: "LockedBuiltinMap", new: func() ConcurrentMap { return NewLockedBuiltinMap() }},
-			{name: fmt.Sprintf("LockedShardedBuiltinMap/shards=%d", defaultShards), new: func() ConcurrentMap { return NewLockedShardedBuiltinMap(defaultShards) }},
-			{name: "SyncMap", new: func() ConcurrentMap { return NewSyncMapAdapter() }},
-		}
+			benchmarks := []struct {
+				name string
+				new  func() ConcurrentMap
+			}{
+				{name: "LockedBuiltinMap", new: func() ConcurrentMap { return NewLockedBuiltinMap() }},
+				{name: fmt.Sprintf("LockedShardedBuiltinMap/shards=%d", defaultShards), new: func() ConcurrentMap { return NewLockedShardedBuiltinMap(defaultShards) }},
+				{name: "SyncMap", new: func() ConcurrentMap { return NewSyncMapAdapter() }},
+			}
 
-		for _, bm := range benchmarks {
-			b.Run(fmt.Sprintf("%s/n=%d", bm.name, n), func(b *testing.B) {
-				hashMap := bm.new()
+			for _, bm := range benchmarks {
+				b.Run(fmt.Sprintf("%s/n=%d/keysize=%d", bm.name, n, keySize), func(b *testing.B) {
+					hashMap := bm.new()
 
-				b.ReportAllocs()
-				b.ReportMetric(float64(n), "keys/op")
-				b.ResetTimer()
+					b.ReportAllocs()
+					b.ReportMetric(float64(n), "keys/op")
+					b.ReportMetric(float64(keySize), "key_size_bytes")
+					b.ResetTimer()
 
-				b.RunParallel(func(pb *testing.PB) {
-					keyIndex := 0
-					for pb.Next() {
-						hashMap.Set(keys[keyIndex], keyIndex)
-						keyIndex++
-						if keyIndex == len(keys) {
-							keyIndex = 0
+					var workerCounter atomic.Uint64
+					b.RunParallel(func(pb *testing.PB) {
+						workerID := int(workerCounter.Add(1))
+						keyIndex := workerID % len(keys)
+						for pb.Next() {
+							hashMap.Set(keys[keyIndex], keyIndex)
+							keyIndex += 17
+							if keyIndex >= len(keys) {
+								keyIndex %= len(keys)
+							}
 						}
-					}
+					})
 				})
-			})
+			}
 		}
 	}
 }
@@ -137,10 +157,11 @@ func BenchmarkConcurrentMapWriteHeavy(b *testing.B) {
 func runMixedParallelBenchmark(
 	b *testing.B,
 	n int,
+	keySize int,
 	newMap func() ConcurrentMap,
 	writeEvery int,
 ) {
-	keys := makeBenchmarkKeys(n, defaultKeySize, keyPrefix)
+	keys := makeBenchmarkKeys(n, keySize, keyPrefix)
 	hashMap := newMap()
 	// Preload map so benchmark measures mixed traffic, not cold-start inserts.
 	for keyIndex, key := range keys {
@@ -149,6 +170,7 @@ func runMixedParallelBenchmark(
 
 	b.ReportAllocs()
 	b.ReportMetric(float64(n), "keys/op")
+	b.ReportMetric(float64(keySize), "key_size_bytes")
 	readPct := 100 - (100 / writeEvery)
 	b.ReportMetric(float64(readPct), "read_pct")
 	b.ResetTimer()
@@ -200,20 +222,22 @@ func BenchmarkConcurrentMapMixedRatios(b *testing.B) {
 	}
 
 	for _, n := range concurrencyScales {
-		for _, ratio := range ratios {
-			benchmarks := []struct {
-				name string
-				new  func() ConcurrentMap
-			}{
-				{name: "LockedBuiltinMap", new: func() ConcurrentMap { return NewLockedBuiltinMap() }},
-				{name: fmt.Sprintf("LockedShardedBuiltinMap/shards=%d", defaultShards), new: func() ConcurrentMap { return NewLockedShardedBuiltinMap(defaultShards) }},
-				{name: "SyncMap", new: func() ConcurrentMap { return NewSyncMapAdapter() }},
-			}
+		for _, keySize := range concurrentKeySizes {
+			for _, ratio := range ratios {
+				benchmarks := []struct {
+					name string
+					new  func() ConcurrentMap
+				}{
+					{name: "LockedBuiltinMap", new: func() ConcurrentMap { return NewLockedBuiltinMap() }},
+					{name: fmt.Sprintf("LockedShardedBuiltinMap/shards=%d", defaultShards), new: func() ConcurrentMap { return NewLockedShardedBuiltinMap(defaultShards) }},
+					{name: "SyncMap", new: func() ConcurrentMap { return NewSyncMapAdapter() }},
+				}
 
-			for _, bm := range benchmarks {
-				b.Run(fmt.Sprintf("%s/%s/n=%d", ratio.name, bm.name, n), func(b *testing.B) {
-					runMixedParallelBenchmark(b, n, bm.new, ratio.writeEvery)
-				})
+				for _, bm := range benchmarks {
+					b.Run(fmt.Sprintf("%s/%s/n=%d/keysize=%d", ratio.name, bm.name, n, keySize), func(b *testing.B) {
+						runMixedParallelBenchmark(b, n, keySize, bm.new, ratio.writeEvery)
+					})
+				}
 			}
 		}
 	}
@@ -221,23 +245,22 @@ func BenchmarkConcurrentMapMixedRatios(b *testing.B) {
 
 // Sweeps shard counts for the locked sharded map at 90/10 mix to find practical shard tuning.
 func BenchmarkLockedShardedMapShardSweepMixed90Read10Write(b *testing.B) {
-	// Old shard sweep:
-	// shardCounts := []int{1, 2, 4, 8, 16, 32, 64, 128}
-	//
-	// New lighter sweep:
-	shardCounts := []int{1, 4, 16, 32, 64}
+	shardCounts := []int{1, 2, 4, 8, 16, 32, 64, 128}
 	const writeEvery = 10 // 90/10 mix
 
 	for _, n := range concurrencyScales {
-		for _, shardCount := range shardCounts {
-			b.Run(fmt.Sprintf("n=%d/shards=%d", n, shardCount), func(b *testing.B) {
-				runMixedParallelBenchmark(
-					b,
-					n,
-					func() ConcurrentMap { return NewLockedShardedBuiltinMap(shardCount) },
-					writeEvery,
-				)
-			})
+		for _, keySize := range concurrentKeySizes {
+			for _, shardCount := range shardCounts {
+				b.Run(fmt.Sprintf("n=%d/shards=%d/keysize=%d", n, shardCount, keySize), func(b *testing.B) {
+					runMixedParallelBenchmark(
+						b,
+						n,
+						keySize,
+						func() ConcurrentMap { return NewLockedShardedBuiltinMap(shardCount) },
+						writeEvery,
+					)
+				})
+			}
 		}
 	}
 }
