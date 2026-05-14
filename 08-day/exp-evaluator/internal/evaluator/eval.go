@@ -2,7 +2,7 @@ package evaluator
 
 import "fmt"
 
-func wEvaluate(expr string) (float64, error) {
+func Evaluate(expr string) (float64, error) {
 	tokens, err := Tokenize(expr)
 	if err != nil {
 		return 0, fmt.Errorf("tokenize: %w", err)
