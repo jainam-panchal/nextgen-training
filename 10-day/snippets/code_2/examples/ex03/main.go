@@ -1,3 +1,14 @@
+/*
+# Word Count - iterative
+
+## TODO 1 - Count the occurrence of each _word_ in text files
+
+## Requirements
+
+1. Filenames are passed as arguments to the program
+2. Use _bufio.Scanner_ to read words from a file.
+3. Use _strings.ToLower()_ when comparing words.
+*/
 package main
 
 import (
@@ -8,6 +19,7 @@ import (
 	"runtime"
 	"runtime/pprof"
 	"strings"
+	"sync"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -38,11 +50,14 @@ func main() {
 	}
 
 	result := make(map[string]int)
+	resLock := new(sync.Mutex)
+	wg := new(sync.WaitGroup)
 
 	start := time.Now()
 	for _, fn := range flag.Args() {
-		processFile(result, fn)
+		processFile(wg, fn, result, resLock)
 	}
+	wg.Wait()
 
 	defer fmt.Printf("Processing took: %v\n", time.Since(start))
 	printResult(result)
@@ -60,22 +75,29 @@ func main() {
 	}
 }
 
-func processFile(result map[string]int, fn string) {
-	var w string
-	r, err := os.Open(fn)
-	if nil != err {
-		log.Warn(err)
-		return
-	}
-	defer r.Close()
+func processFile(wg *sync.WaitGroup, fn string, result map[string]int, resLock *sync.Mutex) {
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
 
-	sc := bufio.NewScanner(r)
-	sc.Split(bufio.ScanWords)
+		var w string
+		r, err := os.Open(fn)
+		if nil != err {
+			log.Warn(err)
+			return
+		}
+		defer r.Close()
 
-	for sc.Scan() {
-		w = strings.ToLower(sc.Text())
-		result[w] = result[w] + 1
-	}
+		sc := bufio.NewScanner(r)
+		sc.Split(bufio.ScanWords)
+
+		for sc.Scan() {
+			w = strings.ToLower(sc.Text())
+			resLock.Lock()
+			result[w] = result[w] + 1
+			resLock.Unlock()
+		}
+	}()
 }
 
 func printResult(result map[string]int) {

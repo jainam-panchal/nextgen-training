@@ -1,3 +1,14 @@
+/*
+# Word Count - iterative
+
+## TODO 1 - Count the occurrence of each _word_ in text files
+
+## Requirements
+
+1. Filenames are passed as arguments to the program
+2. Use _bufio.Scanner_ to read words from a file.
+3. Use _strings.ToLower()_ when comparing words.
+*/
 package main
 
 import (
