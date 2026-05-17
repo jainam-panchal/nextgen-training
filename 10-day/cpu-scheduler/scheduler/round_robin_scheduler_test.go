@@ -10,6 +10,7 @@ import (
 func TestRoundRobinPreemptsLowPriorityWhenHighPriorityArrives(t *testing.T) {
 	queue := NewRoundRobinQueue()
 	rrScheduler := NewRoundRobinScheduler(queue)
+	rrScheduler.SetVerbose(false)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

@@ -12,13 +12,19 @@ import (
 type PriorityScheduler struct {
 	queue   *SafeTaskHeap
 	metrics *SchedulerMetrics
+	verbose bool
 }
 
 func NewPriorityScheduler(queue *SafeTaskHeap) *PriorityScheduler {
 	return &PriorityScheduler{
 		queue:   queue,
 		metrics: NewSchedulerMetrics(),
+		verbose: true,
 	}
+}
+
+func (s *PriorityScheduler) SetVerbose(verbose bool) {
+	s.verbose = verbose
 }
 
 func (s *PriorityScheduler) Run(ctx context.Context) {
@@ -33,15 +39,15 @@ func (s *PriorityScheduler) Run(ctx context.Context) {
 			case <-ctx.Done():
 				s.metrics.MarkFinished()
 				return
-			default:
-				time.Sleep(10 * time.Millisecond)
+			case <-s.queue.NotifyChan():
 				continue
 			}
 		}
 
 		if task == nil {
-			fmt.Println("scheduler received nil task")
-			time.Sleep(10 * time.Millisecond)
+			if s.verbose {
+				fmt.Println("scheduler received nil task")
+			}
 			continue
 		}
 
@@ -55,27 +61,31 @@ func (s *PriorityScheduler) runTask(task *Task) {
 
 	if task.WaitTime > 5*time.Second {
 		task.Status = StatusStarved
-		s.metrics.RecordCompletedTask()
+		s.metrics.RecordStarvation()
 	}
 
 	task.Status = StatusRunning
 	s.metrics.RecordContextSwitch()
 
-	fmt.Printf("[T=%.2fs] PID=%d (P%d) START | ",
-		time.Since(s.metrics.StartedAt).Seconds(),
-		task.PID,
-		task.Priority,
-	)
+	if s.verbose {
+		fmt.Printf("[T=%.2fs] PID=%d (P%d) START | ",
+			time.Since(s.metrics.StartedAt).Seconds(),
+			task.PID,
+			task.Priority,
+		)
+	}
 	time.Sleep(task.CPUBurst) // working.. duuh duh duh
 
 	task.Status = StatusCompleted
 	s.metrics.RecordCompletedTask()
 	s.metrics.RecordWait(task.Priority, task.WaitTime)
 
-	fmt.Printf("[T=%.2fs] PID=%d DONE\n",
-		time.Since(s.metrics.StartedAt).Seconds(),
-		task.PID,
-	)
+	if s.verbose {
+		fmt.Printf("[T=%.2fs] PID=%d DONE\n",
+			time.Since(s.metrics.StartedAt).Seconds(),
+			task.PID,
+		)
+	}
 }
 
 func (s *PriorityScheduler) Metrics() *SchedulerMetrics {

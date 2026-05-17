@@ -9,13 +9,19 @@ import (
 type RoundRobinScheduler struct {
 	queue   *RoundRobinQueue
 	metrics *SchedulerMetrics
+	verbose bool
 }
 
 func NewRoundRobinScheduler(queue *RoundRobinQueue) *RoundRobinScheduler {
 	return &RoundRobinScheduler{
 		queue:   queue,
 		metrics: NewSchedulerMetrics(),
+		verbose: true,
 	}
+}
+
+func (s *RoundRobinScheduler) SetVerbose(verbose bool) {
+	s.verbose = verbose
 }
 
 func (s *RoundRobinScheduler) Run(ctx context.Context) {
@@ -43,14 +49,16 @@ func (s *RoundRobinScheduler) runTask(task *Task, quantum time.Duration) {
 	task.Status = StatusRunning
 	s.metrics.RecordContextSwitch()
 
-	fmt.Printf(
-		"[RR][T=%.2fs] PID=%d (P%d) START quantum=%v burst=%v | ",
-		time.Since(s.metrics.StartedAt).Seconds(),
-		task.PID,
-		task.Priority,
-		quantum,
-		task.CPUBurst,
-	)
+	if s.verbose {
+		fmt.Printf(
+			"[RR][T=%.2fs] PID=%d (P%d) START quantum=%v burst=%v | ",
+			time.Since(s.metrics.StartedAt).Seconds(),
+			task.PID,
+			task.Priority,
+			quantum,
+			task.CPUBurst,
+		)
+	}
 
 	runDuration := quantum
 	if task.CPUBurst < quantum {
@@ -78,11 +86,13 @@ func (s *RoundRobinScheduler) runTask(task *Task, quantum time.Duration) {
 			s.metrics.RecordCompletedTask()
 			s.metrics.RecordWait(task.Priority, task.WaitTime)
 
-			fmt.Printf(
-				"[RR][T=%.2fs] PID=%d DONE\n",
-				time.Since(s.metrics.StartedAt).Seconds(),
-				task.PID,
-			)
+			if s.verbose {
+				fmt.Printf(
+					"[RR][T=%.2fs] PID=%d DONE\n",
+					time.Since(s.metrics.StartedAt).Seconds(),
+					task.PID,
+				)
+			}
 
 			return
 		}
@@ -92,12 +102,14 @@ func (s *RoundRobinScheduler) runTask(task *Task, quantum time.Duration) {
 			task.ArrivalTime = time.Now()
 			s.queue.Push(task)
 
-			fmt.Printf(
-				"[RR][T=%.2fs] PID=%d PREEMPTED remaining=%v\n",
-				time.Since(s.metrics.StartedAt).Seconds(),
-				task.PID,
-				task.CPUBurst,
-			)
+			if s.verbose {
+				fmt.Printf(
+					"[RR][T=%.2fs] PID=%d PREEMPTED remaining=%v\n",
+					time.Since(s.metrics.StartedAt).Seconds(),
+					task.PID,
+					task.CPUBurst,
+				)
+			}
 
 			return
 		}
@@ -107,12 +119,14 @@ func (s *RoundRobinScheduler) runTask(task *Task, quantum time.Duration) {
 	task.ArrivalTime = time.Now()
 	s.queue.Push(task)
 
-	fmt.Printf(
-		"[RR][T=%.2fs] PID=%d REQUEUED remaining=%v\n",
-		time.Since(s.metrics.StartedAt).Seconds(),
-		task.PID,
-		task.CPUBurst,
-	)
+	if s.verbose {
+		fmt.Printf(
+			"[RR][T=%.2fs] PID=%d REQUEUED remaining=%v\n",
+			time.Since(s.metrics.StartedAt).Seconds(),
+			task.PID,
+			task.CPUBurst,
+		)
+	}
 }
 
 func (s *RoundRobinScheduler) Metrics() *SchedulerMetrics {
