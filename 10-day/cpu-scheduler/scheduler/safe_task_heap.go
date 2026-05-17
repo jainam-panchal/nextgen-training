@@ -49,3 +49,26 @@ func (q *SafeTaskHeap) IsEmpty() bool {
 
 	return q.heap.IsEmpty()
 }
+func (q *SafeTaskHeap) AgeWaitingTasks() {
+	q.mutex.Lock()
+	defer q.mutex.Unlock()
+
+	tasks := make([]*Task, 0, q.heap.Len())
+
+	for !q.heap.IsEmpty() {
+		task, err := q.heap.Pop()
+		if err != nil {
+			break
+		}
+
+		if task.Priority > 1 {
+			task.Priority--
+		}
+
+		tasks = append(tasks, task)
+	}
+
+	for _, task := range tasks {
+		q.heap.Push(task)
+	}
+}

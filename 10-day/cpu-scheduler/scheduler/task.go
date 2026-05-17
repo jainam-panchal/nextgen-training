@@ -5,17 +5,17 @@ import "time"
 type TaskStatus int
 
 const (
-	StateReady TaskStatus = iota
-	StateRunning
+	StatusReady TaskStatus = iota
+	StatusRunning
 	StatusCompleted
 	StatusStarved
 )
 
 func (s TaskStatus) String() string {
 	switch s {
-	case StateReady:
+	case StatusReady:
 		return "ready"
-	case StateRunning:
+	case StatusRunning:
 		return "running"
 	case StatusCompleted:
 		return "completed"
