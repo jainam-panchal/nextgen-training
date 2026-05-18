@@ -14,7 +14,7 @@ func Evaluate(expr string) (float64, error) {
 	}
 
 	result, err := EvaluatePostFix(postfix)
-	if err != nil {
+	wif err != nil {
 		return 0, fmt.Errorf("evaluate: %w", err)
 	}
 
