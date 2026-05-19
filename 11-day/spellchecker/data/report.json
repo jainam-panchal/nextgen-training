@@ -3,52 +3,92 @@
   "misspelled": 6,
   "corrections": [
     {
-      "word": "contains",
+      "word": "is",
       "suggestions": [
         {
-          "word": "contain",
+          "word": "dis",
           "distance": 1,
           "frequency": 1
         },
         {
-          "word": "container",
+          "word": "his",
+          "distance": 1,
+          "frequency": 1
+        },
+        {
+          "word": "its",
+          "distance": 1,
+          "frequency": 1
+        },
+        {
+          "word": "ads",
           "distance": 2,
           "frequency": 1
         },
         {
-          "word": "contline",
+          "word": "aid",
           "distance": 2,
           "frequency": 1
         }
       ]
     },
     {
-      "word": "words",
+      "word": "a",
       "suggestions": [
         {
-          "word": "word",
-          "distance": 1,
-          "frequency": 1
-        },
-        {
-          "word": "wordy",
-          "distance": 1,
-          "frequency": 1
-        },
-        {
-          "word": "works",
-          "distance": 1,
-          "frequency": 1
-        },
-        {
-          "word": "lord",
+          "word": "abe",
           "distance": 2,
-          "frequency": 2
+          "frequency": 1
         },
         {
-          "word": "odds",
+          "word": "abo",
           "distance": 2,
-          "frequency": 2
+          "frequency": 1
+        },
+        {
+          "word": "abu",
+          "distance": 2,
+          "frequency": 1
+        },
+        {
+          "word": "ace",
+          "distance": 2,
+          "frequency": 1
+        },
+        {
+          "word": "act",
+          "distance": 2,
+          "frequency": 1
+        }
+      ]
+    },
+    {
+      "word": "it",
+      "suggestions": [
+        {
+          "word": "bit",
+          "distance": 1,
+          "frequency": 1
+        },
+        {
+          "word": "fit",
+          "distance": 1,
+          "frequency": 1
+        },
+        {
+          "word": "hit",
+          "distance": 1,
+          "frequency": 1
+        },
+        {
+          "word": "ito",
+          "distance": 1,
+          "frequency": 1
+        },
+        {
+          "word": "its",
+          "distance": 1,
+          "frequency": 1
         }
       ]
     },
@@ -61,8 +101,13 @@
           "frequency": 1
         },
         {
-          "word": "misspend",
-          "distance": 2,
+          "word": "misspelled",
+          "distance": 1,
+          "frequency": 1
+        },
+        {
+          "word": "misspells",
+          "distance": 1,
           "frequency": 1
         }
       ]
@@ -71,13 +116,8 @@
       "word": "programing",
       "suggestions": [
         {
-          "word": "programist",
-          "distance": 2,
-          "frequency": 1
-        },
-        {
-          "word": "proracing",
-          "distance": 2,
+          "word": "programming",
+          "distance": 1,
           "frequency": 1
         }
       ]
@@ -91,32 +131,22 @@
           "frequency": 1
         },
         {
-          "word": "logres",
+          "word": "pores",
           "distance": 2,
           "frequency": 1
         },
         {
-          "word": "proceres",
+          "word": "probes",
           "distance": 2,
           "frequency": 1
         },
         {
-          "word": "procris",
+          "word": "procures",
           "distance": 2,
           "frequency": 1
         },
         {
-          "word": "progger",
-          "distance": 2,
-          "frequency": 1
-        }
-      ]
-    },
-    {
-      "word": "misspelled",
-      "suggestions": [
-        {
-          "word": "misspell",
+          "word": "program",
           "distance": 2,
           "frequency": 1
         }

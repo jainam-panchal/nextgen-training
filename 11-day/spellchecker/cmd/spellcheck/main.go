@@ -12,7 +12,7 @@ import (
 )
 
 func main() {
-	dictPath := flag.String("dict", "data/unix-words.txt", "path to dictionary file")
+	dictPath := flag.String("dict", "data/dictionary.txt", "path to dictionary file")
 	inputPath := flag.String("in", "data/input.txt", "path to input text file")
 	outputPath := flag.String("out", "data/report.json", "path to output report file")
 	limit := flag.Int("limit", 5, "max suggestions per misspelled word")
