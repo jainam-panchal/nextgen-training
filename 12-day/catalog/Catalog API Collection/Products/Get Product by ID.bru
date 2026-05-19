@@ -1,0 +1,15 @@
+meta {
+  name: Get Product by ID
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/products/p-1001
+  body: none
+  auth: none
+}
+
+headers {
+  Accept: application/json
+}

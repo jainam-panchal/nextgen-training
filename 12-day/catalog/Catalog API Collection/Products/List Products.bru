@@ -1,0 +1,15 @@
+meta {
+  name: List Products
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/products?category=electronics&min_price=500&max_price=2000&sort=price&order=asc&page=1&size=20
+  body: none
+  auth: none
+}
+
+headers {
+  Accept: application/json
+}

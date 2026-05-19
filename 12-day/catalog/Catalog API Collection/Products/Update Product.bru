@@ -1,0 +1,28 @@
+meta {
+  name: Update Product
+  type: http
+  seq: 4
+}
+
+put {
+  url: {{baseUrl}}/products/p-1001
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+  Accept: application/json
+}
+
+body:json {
+  {
+    "name": "Wireless Mouse Pro",
+    "category": "electronics",
+    "price": 899.0,
+    "rating": 4.6,
+    "stock": 35,
+    "tags": ["wireless", "usb", "pro"],
+    "created_at": "2026-01-10T10:00:00Z"
+  }
+}
