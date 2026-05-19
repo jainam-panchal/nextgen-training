@@ -1,0 +1,3 @@
+This is a sample input for the spell checker.
+It contains correct words and a few misspelld words.
+Programing and progres are intentionally misspelled.

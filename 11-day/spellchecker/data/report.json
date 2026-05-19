@@ -1,0 +1,156 @@
+{
+  "total_words": 24,
+  "misspelled": 6,
+  "corrections": [
+    {
+      "word": "is",
+      "suggestions": [
+        {
+          "word": "dis",
+          "distance": 1,
+          "frequency": 1
+        },
+        {
+          "word": "his",
+          "distance": 1,
+          "frequency": 1
+        },
+        {
+          "word": "its",
+          "distance": 1,
+          "frequency": 1
+        },
+        {
+          "word": "ads",
+          "distance": 2,
+          "frequency": 1
+        },
+        {
+          "word": "aid",
+          "distance": 2,
+          "frequency": 1
+        }
+      ]
+    },
+    {
+      "word": "a",
+      "suggestions": [
+        {
+          "word": "abe",
+          "distance": 2,
+          "frequency": 1
+        },
+        {
+          "word": "abo",
+          "distance": 2,
+          "frequency": 1
+        },
+        {
+          "word": "abu",
+          "distance": 2,
+          "frequency": 1
+        },
+        {
+          "word": "ace",
+          "distance": 2,
+          "frequency": 1
+        },
+        {
+          "word": "act",
+          "distance": 2,
+          "frequency": 1
+        }
+      ]
+    },
+    {
+      "word": "it",
+      "suggestions": [
+        {
+          "word": "bit",
+          "distance": 1,
+          "frequency": 1
+        },
+        {
+          "word": "fit",
+          "distance": 1,
+          "frequency": 1
+        },
+        {
+          "word": "hit",
+          "distance": 1,
+          "frequency": 1
+        },
+        {
+          "word": "ito",
+          "distance": 1,
+          "frequency": 1
+        },
+        {
+          "word": "its",
+          "distance": 1,
+          "frequency": 1
+        }
+      ]
+    },
+    {
+      "word": "misspelld",
+      "suggestions": [
+        {
+          "word": "misspell",
+          "distance": 1,
+          "frequency": 1
+        },
+        {
+          "word": "misspelled",
+          "distance": 1,
+          "frequency": 1
+        },
+        {
+          "word": "misspells",
+          "distance": 1,
+          "frequency": 1
+        }
+      ]
+    },
+    {
+      "word": "programing",
+      "suggestions": [
+        {
+          "word": "programming",
+          "distance": 1,
+          "frequency": 1
+        }
+      ]
+    },
+    {
+      "word": "progres",
+      "suggestions": [
+        {
+          "word": "progress",
+          "distance": 1,
+          "frequency": 1
+        },
+        {
+          "word": "pores",
+          "distance": 2,
+          "frequency": 1
+        },
+        {
+          "word": "probes",
+          "distance": 2,
+          "frequency": 1
+        },
+        {
+          "word": "procures",
+          "distance": 2,
+          "frequency": 1
+        },
+        {
+          "word": "program",
+          "distance": 2,
+          "frequency": 1
+        }
+      ]
+    }
+  ]
+}
