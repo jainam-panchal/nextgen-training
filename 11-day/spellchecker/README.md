@@ -18,23 +18,24 @@ The core goal is to combine data structures (Trie + BST) with file streaming (`b
 ### 1) End-to-End Flow
 
 ```mermaid
-flowchart TD
-    D[data/unix-words.txt] --> L[LoadWordsAndTrie<br/>bufio.Scanner]
-    L --> T[Trie Dictionary]
-    IN[data/input.txt] --> R1[Read Input]
-    R1 --> TK[Tokenize]
-    TK --> C1[MisspelledWords]
-    T --> C1
-    C1 --> M[Misspelled Set]
-    M --> DYM[DidYouMean per Misspelled Word]
-    D --> DW[Dictionary Words]
-    DW --> DYM
-    T --> FQ[Frequency Lookup]
-    DYM --> RP[Ranked Suggestions]
-    FQ --> RP
-    TK --> TW[Total Words]
-    TW --> WR[WriteToFile<br/>json.Encoder]
-    RP --> WR
+flowchart LR
+    D[data/unix-words.txt] --> L[LoadWordsAndTrie]
+    L --> T[Trie]
+    L --> W[Word List]
+
+    IN[data/input.txt] --> R[Read Input]
+    R --> TK[Tokenize]
+    TK --> MW[MisspelledWords using Trie]
+    MW --> M[Misspelled Set]
+    M --> DY[DidYouMean]
+    W --> DY
+    T --> DY
+    DY --> S[Top N Suggestions]
+
+    TK --> C[Total Word Count]
+    C --> REP[Build Report]
+    S --> REP
+    REP --> WR[WriteToFile]
     WR --> OUT[data/report.json]
 ```
 
@@ -47,7 +48,7 @@ flowchart LR
     LOOP --> LD[Levenshtein Distance]
     LD --> F{distance <= 2 ?}
     F -- no --> LOOP
-    F -- yes --> B[BST.Insert<br/>(dist asc, freq desc, word asc)]
+    F -- yes --> B[BST Insert by rank]
     B --> LOOP
     LOOP --> S[BST.Sorted(limit)]
     S --> O[Top Suggestions]
