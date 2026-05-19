@@ -15,26 +15,56 @@ The core goal is to combine data structures (Trie + BST) with file streaming (`b
 
 ## Architecture (Mermaid)
 
+### 1) End-to-End Flow
+
 ```mermaid
 flowchart TD
-    D[data/unix-words.txt] --> L[Dictionary Loader<br/>bufio.Scanner]
-    L --> T[Trie<br/>Insert/Search/StartsWith/Delete/AutoComplete]
-    I[data/input.txt] --> TK[Tokenizer<br/>unicode-aware]
-    TK --> SC[Spell Check<br/>Trie.Search]
-    T --> SC
-    SC --> M[Misspelled Set]
-    M --> DY[Did-You-Mean Pipeline]
-    D --> W[Dictionary Word Stream]
-    W --> DY
-    DY --> LV[Levenshtein DP<br/>distance <= 2]
-    T --> FQ[Trie Frequency Lookup]
-    LV --> BST[BST Ranker<br/>distance asc, frequency desc, lexical asc]
-    FQ --> BST
-    BST --> R[Corrections]
-    TK --> TW[Total Word Count]
-    TW --> J[JSON Report Writer<br/>json.Encoder]
-    R --> J
-    J --> O[data/report.json]
+    D[data/unix-words.txt] --> L[LoadWordsAndTrie<br/>bufio.Scanner]
+    L --> T[Trie Dictionary]
+    IN[data/input.txt] --> R1[Read Input]
+    R1 --> TK[Tokenize]
+    TK --> C1[MisspelledWords]
+    T --> C1
+    C1 --> M[Misspelled Set]
+    M --> DYM[DidYouMean per Misspelled Word]
+    D --> DW[Dictionary Words]
+    DW --> DYM
+    T --> FQ[Frequency Lookup]
+    DYM --> RP[Ranked Suggestions]
+    FQ --> RP
+    TK --> TW[Total Words]
+    TW --> WR[WriteToFile<br/>json.Encoder]
+    RP --> WR
+    WR --> OUT[data/report.json]
+```
+
+### 2) Suggestion Ranking Internals
+
+```mermaid
+flowchart LR
+    W[Input Word] --> N[Normalize]
+    N --> LOOP[Loop Dictionary Candidates]
+    LOOP --> LD[Levenshtein Distance]
+    LD --> F{distance <= 2 ?}
+    F -- no --> LOOP
+    F -- yes --> B[BST.Insert<br/>(dist asc, freq desc, word asc)]
+    B --> LOOP
+    LOOP --> S[BST.Sorted(limit)]
+    S --> O[Top Suggestions]
+```
+
+### 3) Trie Delete and Prune Logic
+
+```mermaid
+flowchart TD
+    A[Delete(word)] --> B[Recursive Walk by Rune]
+    B --> C{Word Exists?}
+    C -- no --> X[Return false]
+    C -- yes --> D[Unset IsWord and Frequency=0]
+    D --> E[Backtrack]
+    E --> F{Child has no children and IsWord=false?}
+    F -- yes --> G[Prune child pointer]
+    F -- no --> H[Keep child]
 ```
 
 ## Technical Summary
