@@ -1,6 +1,7 @@
 package store
 
 import (
+	"math"
 	"testing"
 	"time"
 
@@ -362,7 +363,7 @@ func TestStats(t *testing.T) {
 	}
 
 	expectedAvgRating := (4.2 + 4.5 + 4.1 + 4.9) / 4
-	if stats.AvgRating != expectedAvgRating {
+	if math.Abs(stats.AvgRating-expectedAvgRating) > 1e-9 {
 		t.Fatalf("expected avg rating %f, got %f", expectedAvgRating, stats.AvgRating)
 	}
 }
