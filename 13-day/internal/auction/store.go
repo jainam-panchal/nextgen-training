@@ -4,13 +4,21 @@ import (
 	"realtime-auction/internal/ds/heap"
 	"realtime-auction/internal/ds/linkedlist"
 	"realtime-auction/internal/ds/stack"
+	"realtime-auction/internal/ds/tree"
 	"realtime-auction/internal/models"
 	"sync"
 	"sync/atomic"
 )
 
+const (
+	defaultLiveQueueSize = 100
+)
+
 type AuctionStore struct {
 	mu sync.RWMutex
+
+	categoryTree      *tree.Tree[string]
+	itemIDsByCategory map[string]map[models.ItemID]struct{}
 
 	usersByID map[models.UserID]*models.User
 	itemsByID map[models.ItemID]*models.Item
@@ -18,9 +26,9 @@ type AuctionStore struct {
 
 	itemBidHeaps   map[models.ItemID]*heap.MaxHeap[*models.Bid]
 	itemBidHistory map[models.ItemID]*linkedlist.LinkedList[models.BidID]
-	itemLiveQueues map[models.ItemID]chan *models
+	itemLiveQueues map[models.ItemID]chan BidEvent
 
-	userBidStacks map[models.UserID]*stack.Stack[models.BidID]
+	userBidStacks map[models.UserID]map[models.ItemID]*stack.Stack[models.BidID]
 
 	itemLocksMu sync.Mutex
 	itemLocks   map[models.ItemID]*sync.Mutex
@@ -32,13 +40,18 @@ type AuctionStore struct {
 
 func NewAuctionStore() *AuctionStore {
 	return &AuctionStore{
+		categoryTree: tree.NewTree("ALL"),
+		itemIDsByCategory: map[string]map[models.ItemID]struct{}{
+			"ALL": make(map[models.ItemID]struct{}),
+		},
 		usersByID:      make(map[models.UserID]*models.User),
 		itemsByID:      make(map[models.ItemID]*models.Item),
 		bidsByID:       make(map[models.BidID]*models.Bid),
 		itemBidHeaps:   make(map[models.ItemID]*heap.MaxHeap[*models.Bid]),
 		itemBidHistory: make(map[models.ItemID]*linkedlist.LinkedList[models.BidID]),
-		userBidStacks:  make(map[models.UserID]*stack.Stack[models.BidID]),
+		userBidStacks:  make(map[models.UserID]map[models.ItemID]*stack.Stack[models.BidID]),
 		itemLocks:      make(map[models.ItemID]*sync.Mutex),
+		itemLiveQueues: make(map[models.ItemID]chan BidEvent),
 	}
 }
 
@@ -69,10 +82,36 @@ func (s *AuctionStore) getItemLock(itemID models.ItemID) *sync.Mutex {
 }
 
 func (s *AuctionStore) getOrCreateItemHeap(itemID models.ItemID) *heap.MaxHeap[*models.Bid] {
-
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	return s.getOrCreateItemHeapLocked(itemID)
+}
+
+func (s *AuctionStore) getOrCreateItemBidHistory(itemID models.ItemID) *linkedlist.LinkedList[models.BidID] {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return s.getOrCreateItemBidHistoryLocked(itemID)
+}
+
+func (s *AuctionStore) getOrCreateUserBidStack(userID models.UserID) *stack.Stack[models.BidID] {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return s.getOrCreateUserBidStackLocked(userID)
+}
+
+func (s *AuctionStore) getOrCreateLiveQueue(itemID models.ItemID) chan BidEvent {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return s.getOrCreateLiveQueueLocked(itemID)
+}
+
+// The following helpers require s.mu to already be held by caller.
+
+func (s *AuctionStore) getOrCreateItemHeapLocked(itemID models.ItemID) *heap.MaxHeap[*models.Bid] {
 	if h, exists := s.itemBidHeaps[itemID]; exists {
 		return h
 	}
@@ -84,11 +123,7 @@ func (s *AuctionStore) getOrCreateItemHeap(itemID models.ItemID) *heap.MaxHeap[*
 	return h
 }
 
-func (s *AuctionStore) getOrCreateItemBidHistory(itemID models.ItemID) *linkedlist.LinkedList[models.BidID] {
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
+func (s *AuctionStore) getOrCreateItemBidHistoryLocked(itemID models.ItemID) *linkedlist.LinkedList[models.BidID] {
 	if h, exists := s.itemBidHistory[itemID]; exists {
 		return h
 	}
@@ -98,16 +133,73 @@ func (s *AuctionStore) getOrCreateItemBidHistory(itemID models.ItemID) *linkedli
 	return h
 }
 
-func (s *AuctionStore) getOrCreateUserBidStack(userID models.UserID) *stack.Stack[models.BidID] {
+func (s *AuctionStore) getOrCreateUserBidStackLocked(userID models.UserID) *stack.Stack[models.BidID] {
+	itemStacks, exists := s.userBidStacks[userID]
+	if !exists {
+		itemStacks = make(map[models.ItemID]*stack.Stack[models.BidID])
+		s.userBidStacks[userID] = itemStacks
+	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	// Default stack for legacy callers that don't scope by item.
+	const defaultItemID models.ItemID = 0
+	if h, exists := itemStacks[defaultItemID]; exists {
+		return h
+	}
+	h := stack.NewStack[models.BidID]()
+	itemStacks[defaultItemID] = h
+	return h
+}
 
-	if h, exists := s.userBidStacks[userID]; exists {
+func (s *AuctionStore) getOrCreateUserItemBidStackLocked(userID models.UserID, itemID models.ItemID) *stack.Stack[models.BidID] {
+	itemStacks, exists := s.userBidStacks[userID]
+	if !exists {
+		itemStacks = make(map[models.ItemID]*stack.Stack[models.BidID])
+		s.userBidStacks[userID] = itemStacks
+	}
+
+	if h, exists := itemStacks[itemID]; exists {
 		return h
 	}
 
 	h := stack.NewStack[models.BidID]()
-	s.userBidStacks[userID] = h
+	itemStacks[itemID] = h
 	return h
+}
+
+func (s *AuctionStore) getOrCreateLiveQueueLocked(itemID models.ItemID) chan BidEvent {
+	if ch, exists := s.itemLiveQueues[itemID]; exists {
+		return ch
+	}
+
+	ch := make(chan BidEvent, defaultLiveQueueSize)
+	s.itemLiveQueues[itemID] = ch
+	return ch
+}
+
+func (s *AuctionStore) ensureCategoryPathLocked(path []string) error {
+	if len(path) == 0 {
+		return nil
+	}
+	parent := "ALL"
+	for _, category := range path {
+		if category == "" {
+			continue
+		}
+		if _, exists := s.categoryTree.Get(category); !exists {
+			if err := s.categoryTree.Add(parent, category); err != nil && err != tree.ErrChildExists {
+				return err
+			}
+		}
+		parent = category
+	}
+	return nil
+}
+
+func (s *AuctionStore) addItemToCategoryLocked(itemID models.ItemID, category string) {
+	set, exists := s.itemIDsByCategory[category]
+	if !exists {
+		set = make(map[models.ItemID]struct{})
+		s.itemIDsByCategory[category] = set
+	}
+	set[itemID] = struct{}{}
 }

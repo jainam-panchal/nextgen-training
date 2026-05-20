@@ -15,11 +15,12 @@ const (
 )
 
 type Bid struct {
-	ID        BidID
-	ItemID    ItemID
-	UserID    UserID
-	Amount    float64
-	Timestamp time.Time
+	ID          BidID
+	ItemID      ItemID
+	UserID      UserID
+	Amount      float64
+	IsRetracted bool
+	Timestamp   time.Time
 }
 
 type User struct {
