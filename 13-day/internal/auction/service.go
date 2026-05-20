@@ -326,6 +326,61 @@ func (s *AuctionService) RetractLastBid(userID models.UserID, itemID models.Item
 	return lastBidID, nil
 }
 
+func (s *AuctionService) EndAuction(itemID models.ItemID) (*models.Bid, error) {
+	itemLock := s.store.getItemLock(itemID)
+	itemLock.Lock()
+	defer itemLock.Unlock()
+
+	now := time.Now().UTC()
+
+	s.store.mu.Lock()
+	defer s.store.mu.Unlock()
+
+	item, exists := s.store.itemsByID[itemID]
+	if !exists {
+		return nil, ErrItemNotFound
+	}
+	if item.Status != models.ItemStatusActive {
+		return nil, ErrAuctionNotActive
+	}
+
+	h := s.store.getOrCreateItemHeapLocked(itemID)
+	for {
+		top, ok := h.Peek()
+		if !ok {
+			item.CurrentBid = nil
+			break
+		}
+		if top.IsRetracted {
+			_, _ = h.Pop()
+			continue
+		}
+		item.CurrentBid = top
+		break
+	}
+
+	item.Status = models.ItemStatusEnded
+	winner := item.CurrentBid
+
+	ch := s.store.getOrCreateLiveQueueLocked(itemID)
+	winnerBidID := models.BidID(0)
+	if winner != nil {
+		winnerBidID = winner.ID
+	}
+
+	select {
+	case ch <- BidEvent{
+		ItemID:    itemID,
+		BidID:     winnerBidID,
+		Action:    BidEventEnded,
+		Timestamp: now,
+	}:
+	default:
+	}
+
+	return winner, nil
+}
+
 func removeBidID(bids []models.BidID, target models.BidID) []models.BidID {
 	for i := len(bids) - 1; i >= 0; i-- {
 		if bids[i] != target {

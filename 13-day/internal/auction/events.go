@@ -10,6 +10,7 @@ type BidEventAction string
 const (
 	BidEventPlaced    BidEventAction = "placed"
 	BidEventRetracted BidEventAction = "retracted"
+	BidEventEnded     BidEventAction = "ended"
 )
 
 type BidEvent struct {

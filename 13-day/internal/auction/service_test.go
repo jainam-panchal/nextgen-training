@@ -2,6 +2,7 @@ package auction
 
 import (
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -195,6 +196,168 @@ func TestRetractIsItemScoped(t *testing.T) {
 	defer store.mu.RUnlock()
 	if store.bidsByID[bidB].IsRetracted {
 		t.Fatalf("expected bid %d for itemB to remain active", bidB)
+	}
+}
+
+func TestEndAuctionReturnsWinnerAndMarksEnded(t *testing.T) {
+	store := NewAuctionStore()
+	service := NewAuctionService(store)
+
+	userA, itemID := seedUserAndItem(t, store, 1_000, 100, 2)
+	userB := models.UserID(3)
+	store.mu.Lock()
+	store.usersByID[userB] = &models.User{ID: userB, Name: "user-b", Balance: 1_000}
+	store.mu.Unlock()
+
+	if _, err := service.PlaceBid(userA, itemID, 150); err != nil {
+		t.Fatalf("first bid failed: %v", err)
+	}
+	secondBidID, err := service.PlaceBid(userB, itemID, 200)
+	if err != nil {
+		t.Fatalf("second bid failed: %v", err)
+	}
+
+	winner, err := service.EndAuction(itemID)
+	if err != nil {
+		t.Fatalf("EndAuction failed: %v", err)
+	}
+	if winner == nil {
+		t.Fatal("expected winner, got nil")
+	}
+	if winner.ID != secondBidID {
+		t.Fatalf("expected winner bidID %d, got %d", secondBidID, winner.ID)
+	}
+
+	store.mu.RLock()
+	defer store.mu.RUnlock()
+	if store.itemsByID[itemID].Status != models.ItemStatusEnded {
+		t.Fatalf("expected status ended, got %s", store.itemsByID[itemID].Status)
+	}
+}
+
+func TestEndAuctionNoBids(t *testing.T) {
+	store := NewAuctionStore()
+	service := NewAuctionService(store)
+
+	_, itemID := seedUserAndItem(t, store, 1_000, 100, 2)
+	winner, err := service.EndAuction(itemID)
+	if err != nil {
+		t.Fatalf("EndAuction failed: %v", err)
+	}
+	if winner != nil {
+		t.Fatalf("expected nil winner, got bid %d", winner.ID)
+	}
+}
+
+func TestConcurrentBiddingSingleItem100Goroutines(t *testing.T) {
+	store := NewAuctionStore()
+	service := NewAuctionService(store)
+
+	sellerID := models.UserID(2)
+	itemID := models.ItemID(99)
+	now := time.Now().UTC()
+
+	store.mu.Lock()
+	store.itemsByID[itemID] = &models.Item{
+		ID:         itemID,
+		Name:       "concurrent-item",
+		SellerID:   sellerID,
+		StartPrice: 100,
+		StartTime:  now.Add(-time.Hour),
+		EndTime:    now.Add(time.Hour),
+		Status:     models.ItemStatusActive,
+	}
+	for i := 1; i <= 100; i++ {
+		uid := models.UserID(i + 10)
+		store.usersByID[uid] = &models.User{
+			ID:      uid,
+			Name:    "bidder",
+			Balance: 1_000_000,
+		}
+	}
+	store.mu.Unlock()
+
+	var wg sync.WaitGroup
+	wg.Add(100)
+
+	for i := 1; i <= 100; i++ {
+		i := i
+		go func() {
+			defer wg.Done()
+			uid := models.UserID(i + 10)
+			amount := float64(100 + i)
+			_, _ = service.PlaceBid(uid, itemID, amount)
+		}()
+	}
+
+	wg.Wait()
+
+	winner, err := service.EndAuction(itemID)
+	if err != nil {
+		t.Fatalf("EndAuction failed: %v", err)
+	}
+	if winner == nil {
+		t.Fatal("expected winner after concurrent bidding, got nil")
+	}
+	if winner.Amount != 200 {
+		t.Fatalf("expected highest winning amount 200, got %v", winner.Amount)
+	}
+}
+
+func TestRetractLastBidTwiceFails(t *testing.T) {
+	store := NewAuctionStore()
+	service := NewAuctionService(store)
+
+	userID, itemID := seedUserAndItem(t, store, 1_000, 100, 2)
+	if _, err := service.PlaceBid(userID, itemID, 150); err != nil {
+		t.Fatalf("place bid failed: %v", err)
+	}
+
+	if _, err := service.RetractLastBid(userID, itemID); err != nil {
+		t.Fatalf("first retract failed: %v", err)
+	}
+
+	_, err := service.RetractLastBid(userID, itemID)
+	if !errors.Is(err, ErrNoBidToRetract) {
+		t.Fatalf("expected ErrNoBidToRetract on second retract, got %v", err)
+	}
+}
+
+func TestRetractOtherUserBidFails(t *testing.T) {
+	store := NewAuctionStore()
+	service := NewAuctionService(store)
+
+	userA, itemID := seedUserAndItem(t, store, 1_000, 100, 2)
+	userB := models.UserID(777)
+	store.mu.Lock()
+	store.usersByID[userB] = &models.User{ID: userB, Name: "user-b", Balance: 1_000}
+	store.mu.Unlock()
+
+	if _, err := service.PlaceBid(userA, itemID, 150); err != nil {
+		t.Fatalf("place bid by userA failed: %v", err)
+	}
+
+	_, err := service.RetractLastBid(userB, itemID)
+	if !errors.Is(err, ErrNoBidToRetract) {
+		t.Fatalf("expected ErrNoBidToRetract for user without bids, got %v", err)
+	}
+}
+
+func TestRetractWhenAuctionEndedFails(t *testing.T) {
+	store := NewAuctionStore()
+	service := NewAuctionService(store)
+
+	userID, itemID := seedUserAndItem(t, store, 1_000, 100, 2)
+	if _, err := service.PlaceBid(userID, itemID, 150); err != nil {
+		t.Fatalf("place bid failed: %v", err)
+	}
+	if _, err := service.EndAuction(itemID); err != nil {
+		t.Fatalf("end auction failed: %v", err)
+	}
+
+	_, err := service.RetractLastBid(userID, itemID)
+	if !errors.Is(err, ErrAuctionNotActive) {
+		t.Fatalf("expected ErrAuctionNotActive after auction end, got %v", err)
 	}
 }
 
