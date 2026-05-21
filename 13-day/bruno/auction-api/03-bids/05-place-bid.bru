@@ -1,0 +1,22 @@
+meta {
+  name: Place Bid
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{base_url}}/items/{{item_id}}/bid
+  body: json
+  auth: none
+}
+
+headers {
+  X-User-ID: {{bidder_id}}
+}
+
+body:json {
+  {
+    "user_id": {{bidder_id}},
+    "amount": 1500
+  }
+}

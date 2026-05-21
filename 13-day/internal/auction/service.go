@@ -1,13 +1,27 @@
 package auction
 
 import (
+	"math"
 	"realtime-auction/internal/models"
+	"slices"
 	"strings"
 	"time"
 )
 
 type AuctionService struct {
 	store *AuctionStore
+}
+
+type Stats struct {
+	TotalUsers     int     `json:"total_users"`
+	TotalItems     int     `json:"total_items"`
+	ActiveItems    int     `json:"active_items"`
+	EndedItems     int     `json:"ended_items"`
+	CancelledItems int     `json:"cancelled_items"`
+	TotalBids      int     `json:"total_bids"`
+	AverageTopBid  float64 `json:"average_top_bid"`
+	RetractedBids  int     `json:"retracted_bids"`
+	ActiveWatchers int     `json:"active_watchers"`
 }
 
 func NewAuctionService(store *AuctionStore) *AuctionService {
@@ -17,8 +31,8 @@ func NewAuctionService(store *AuctionStore) *AuctionService {
 }
 
 func (s *AuctionService) CreateUser(name string, balance float64) (models.UserID, error) {
-	if name == "" || balance < 0 {
-		return 0, ErrInvalidBidAmount
+	if strings.TrimSpace(name) == "" || balance < 0 {
+		return 0, ErrInvalidUserInput
 	}
 
 	userID := s.store.generateUserID()
@@ -44,10 +58,11 @@ func (s *AuctionService) CreateItem(
 	startTime time.Time,
 	endTime time.Time,
 ) (models.ItemID, error) {
-	if name == "" || startPrice <= 0 || !endTime.After(startTime) {
-		return 0, ErrInvalidBidAmount
+	if strings.TrimSpace(name) == "" || startPrice <= 0 || !endTime.After(startTime) {
+		return 0, ErrInvalidItemInput
 	}
-	if len(categoryPath) == 0 {
+	normalizedCategoryPath := normalizeCategoryPath(categoryPath)
+	if len(normalizedCategoryPath) == 0 {
 		return 0, ErrCategoryNotFound
 	}
 
@@ -58,12 +73,12 @@ func (s *AuctionService) CreateItem(
 		return 0, ErrUserNotFound
 	}
 
-	if err := s.store.ensureCategoryPathLocked(categoryPath); err != nil {
+	if err := s.store.ensureCategoryPathLocked(normalizedCategoryPath); err != nil {
 		return 0, err
 	}
 
 	itemID := s.store.generateItemID()
-	leafCategory := categoryPath[len(categoryPath)-1]
+	leafCategory := normalizedCategoryPath[len(normalizedCategoryPath)-1]
 	item := &models.Item{
 		ID:          itemID,
 		Name:        name,
@@ -141,7 +156,7 @@ func (s *AuctionService) PlaceBid(userID models.UserID, itemID models.ItemID, am
 		return 0, ErrItemNotFound
 	}
 
-	if amount <= 0 {
+	if math.IsNaN(amount) || math.IsInf(amount, 0) || amount <= 0 {
 		s.store.mu.RUnlock()
 		return 0, ErrInvalidBidAmount
 	}
@@ -193,8 +208,8 @@ func (s *AuctionService) PlaceBid(userID models.UserID, itemID models.ItemID, am
 	h := s.store.getOrCreateItemHeapLocked(itemID)
 	h.Push(bid)
 
-	history := s.store.getOrCreateItemBidHistoryLocked(itemID)
-	history.AddRear(bidID)
+	s.store.getOrCreateItemBidHistoryLocked(itemID).AddRear(bidID)
+	item.BidHistory = append(item.BidHistory, bidID)
 
 	st := s.store.getOrCreateUserItemBidStackLocked(userID, itemID)
 	st.Push(bidID)
@@ -202,20 +217,14 @@ func (s *AuctionService) PlaceBid(userID models.UserID, itemID models.ItemID, am
 
 	item.CurrentBid = bid
 
-	ch := s.store.getOrCreateLiveQueueLocked(itemID)
-
 	s.store.mu.Unlock()
 
-	// Non-blocking publish
-	select {
-	case ch <- BidEvent{
+	s.store.publishToWatchers(itemID, BidEvent{
 		ItemID:    itemID,
 		BidID:     bidID,
 		Action:    BidEventPlaced,
 		Timestamp: now,
-	}:
-	default:
-	}
+	})
 
 	return bidID, nil
 }
@@ -303,25 +312,14 @@ func (s *AuctionService) RetractLastBid(userID models.UserID, itemID models.Item
 		break
 	}
 
-	// Append retract event in item history list (BidID list design)
-	history := s.store.getOrCreateItemBidHistoryLocked(itemID)
-	history.AddRear(lastBidID)
-
-	ch := s.store.getOrCreateLiveQueueLocked(itemID)
-
 	s.store.mu.Unlock()
 
-	// Non-blocking publish
-	select {
-	case ch <- BidEvent{
+	s.store.publishToWatchers(itemID, BidEvent{
 		ItemID:    itemID,
 		BidID:     lastBidID,
 		Action:    BidEventRetracted,
 		Timestamp: now,
-	}:
-	default:
-		// drop when queue is full
-	}
+	})
 
 	return lastBidID, nil
 }
@@ -334,13 +332,14 @@ func (s *AuctionService) EndAuction(itemID models.ItemID) (*models.Bid, error) {
 	now := time.Now().UTC()
 
 	s.store.mu.Lock()
-	defer s.store.mu.Unlock()
 
 	item, exists := s.store.itemsByID[itemID]
 	if !exists {
+		s.store.mu.Unlock()
 		return nil, ErrItemNotFound
 	}
 	if item.Status != models.ItemStatusActive {
+		s.store.mu.Unlock()
 		return nil, ErrAuctionNotActive
 	}
 
@@ -362,23 +361,114 @@ func (s *AuctionService) EndAuction(itemID models.ItemID) (*models.Bid, error) {
 	item.Status = models.ItemStatusEnded
 	winner := item.CurrentBid
 
-	ch := s.store.getOrCreateLiveQueueLocked(itemID)
 	winnerBidID := models.BidID(0)
 	if winner != nil {
 		winnerBidID = winner.ID
 	}
+	s.store.mu.Unlock()
 
-	select {
-	case ch <- BidEvent{
+	s.store.publishToWatchers(itemID, BidEvent{
 		ItemID:    itemID,
 		BidID:     winnerBidID,
 		Action:    BidEventEnded,
 		Timestamp: now,
-	}:
-	default:
-	}
+	})
 
 	return winner, nil
+}
+
+func (s *AuctionService) GetItem(itemID models.ItemID) (*models.Item, error) {
+	s.store.mu.RLock()
+	defer s.store.mu.RUnlock()
+
+	item, ok := s.store.itemsByID[itemID]
+	if !ok {
+		return nil, ErrItemNotFound
+	}
+	c := *item
+	if item.CurrentBid != nil {
+		b := *item.CurrentBid
+		c.CurrentBid = &b
+	}
+	c.BidHistory = slices.Clone(item.BidHistory)
+	return &c, nil
+}
+
+func (s *AuctionService) GetItemBids(itemID models.ItemID) ([]*models.Bid, error) {
+	s.store.mu.RLock()
+	defer s.store.mu.RUnlock()
+
+	item, ok := s.store.itemsByID[itemID]
+	if !ok {
+		return nil, ErrItemNotFound
+	}
+
+	bids := make([]*models.Bid, 0, len(item.BidHistory))
+	for _, bidID := range item.BidHistory {
+		b, exists := s.store.bidsByID[bidID]
+		if !exists {
+			continue
+		}
+		copyBid := *b
+		bids = append(bids, &copyBid)
+	}
+	return bids, nil
+}
+
+func (s *AuctionService) GetStats() Stats {
+	s.store.mu.RLock()
+	defer s.store.mu.RUnlock()
+
+	stats := Stats{
+		TotalUsers: len(s.store.usersByID),
+		TotalItems: len(s.store.itemsByID),
+		TotalBids:  len(s.store.bidsByID),
+	}
+	var topBidSum float64
+	var topBidCount int
+	for _, item := range s.store.itemsByID {
+		switch item.Status {
+		case models.ItemStatusActive:
+			stats.ActiveItems++
+		case models.ItemStatusEnded:
+			stats.EndedItems++
+		case models.ItemStatusCancelled:
+			stats.CancelledItems++
+		}
+		if item.CurrentBid != nil && !item.CurrentBid.IsRetracted {
+			topBidSum += item.CurrentBid.Amount
+			topBidCount++
+		}
+	}
+	for _, bid := range s.store.bidsByID {
+		if bid.IsRetracted {
+			stats.RetractedBids++
+		}
+	}
+	for _, watchers := range s.store.watchersByItemID {
+		stats.ActiveWatchers += len(watchers)
+	}
+	if topBidCount > 0 {
+		stats.AverageTopBid = topBidSum / float64(topBidCount)
+	}
+	return stats
+}
+
+func (s *AuctionService) SubscribeItem(itemID models.ItemID) (chan BidEvent, error) {
+	s.store.mu.RLock()
+	_, exists := s.store.itemsByID[itemID]
+	s.store.mu.RUnlock()
+	if !exists {
+		return nil, ErrItemNotFound
+	}
+
+	watcher := make(chan BidEvent, defaultWatcherChannelSize)
+	s.store.addWatcher(itemID, watcher)
+	return watcher, nil
+}
+
+func (s *AuctionService) UnsubscribeItem(itemID models.ItemID, ch chan BidEvent) {
+	s.store.removeWatcher(itemID, ch)
 }
 
 func removeBidID(bids []models.BidID, target models.BidID) []models.BidID {
@@ -389,4 +479,16 @@ func removeBidID(bids []models.BidID, target models.BidID) []models.BidID {
 		return append(bids[:i], bids[i+1:]...)
 	}
 	return bids
+}
+
+func normalizeCategoryPath(path []string) []string {
+	out := make([]string, 0, len(path))
+	for _, category := range path {
+		trimmed := strings.TrimSpace(category)
+		if trimmed == "" {
+			continue
+		}
+		out = append(out, trimmed)
+	}
+	return out
 }

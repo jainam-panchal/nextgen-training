@@ -1,0 +1,17 @@
+meta {
+  name: Retract Last Bid
+  type: http
+  seq: 6
+}
+
+delete {
+  url: {{base_url}}/items/{{item_id}}/bid/last
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "user_id": {{bidder_id}}
+  }
+}

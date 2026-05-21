@@ -8,6 +8,8 @@ var (
 	ErrBidNotFound         = errors.New("bid not found")
 	ErrCategoryNotFound    = errors.New("category not found")
 	ErrInvalidBidAmount    = errors.New("invalid bid amount")
+	ErrInvalidUserInput    = errors.New("invalid user input")
+	ErrInvalidItemInput    = errors.New("invalid item input")
 	ErrAuctionNotActive    = errors.New("auction is not active")
 	ErrSellerCannotBid     = errors.New("seller cannot place bids on their own items")
 	ErrInsufficientBalance = errors.New("user has insufficient balance to place bid")

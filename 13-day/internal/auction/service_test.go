@@ -2,6 +2,7 @@ package auction
 
 import (
 	"errors"
+	"math"
 	"sync"
 	"testing"
 	"time"
@@ -249,6 +250,86 @@ func TestEndAuctionNoBids(t *testing.T) {
 	}
 }
 
+// TestCreateUserValidationErrorType exists because user/item input errors were previously
+// reported as bid errors, which made API responses and diagnostics misleading.
+func TestCreateUserValidationErrorType(t *testing.T) {
+	store := NewAuctionStore()
+	service := NewAuctionService(store)
+
+	_, err := service.CreateUser("   ", 100)
+	if !errors.Is(err, ErrInvalidUserInput) {
+		t.Fatalf("expected ErrInvalidUserInput, got %v", err)
+	}
+}
+
+// TestCreateItemNormalizesCategoryPath exists to prevent empty/whitespace category leafs
+// from being stored under an invalid category key.
+func TestCreateItemNormalizesCategoryPath(t *testing.T) {
+	store := NewAuctionStore()
+	service := NewAuctionService(store)
+
+	sellerID := models.UserID(10)
+	now := time.Now().UTC()
+	store.mu.Lock()
+	store.usersByID[sellerID] = &models.User{
+		ID:      sellerID,
+		Name:    "seller",
+		Balance: 1_000,
+	}
+	store.mu.Unlock()
+
+	itemID, err := service.CreateItem(
+		"item",
+		[]string{"  Electronics  ", "  ", " Phones "},
+		"desc",
+		sellerID,
+		100,
+		now.Add(-time.Hour),
+		now.Add(time.Hour),
+	)
+	if err != nil {
+		t.Fatalf("CreateItem failed: %v", err)
+	}
+
+	store.mu.RLock()
+	defer store.mu.RUnlock()
+	item := store.itemsByID[itemID]
+	if item.Category != "Phones" {
+		t.Fatalf("expected normalized leaf category Phones, got %q", item.Category)
+	}
+	if _, ok := store.itemIDsByCategory[""]; ok {
+		t.Fatalf("unexpected empty category index entry")
+	}
+}
+
+// TestRetractDoesNotDuplicateBidHistory exists because retract previously pushed the same
+// bid ID into history again, creating inconsistent bid-history API output.
+func TestRetractDoesNotDuplicateBidHistory(t *testing.T) {
+	store := NewAuctionStore()
+	service := NewAuctionService(store)
+	userID, itemID := seedUserAndItem(t, store, 1_000, 100, 2)
+
+	bidID, err := service.PlaceBid(userID, itemID, 150)
+	if err != nil {
+		t.Fatalf("place bid failed: %v", err)
+	}
+
+	if _, err := service.RetractLastBid(userID, itemID); err != nil {
+		t.Fatalf("retract failed: %v", err)
+	}
+
+	item, err := service.GetItem(itemID)
+	if err != nil {
+		t.Fatalf("GetItem failed: %v", err)
+	}
+	if len(item.BidHistory) != 1 {
+		t.Fatalf("expected bid history length 1, got %d", len(item.BidHistory))
+	}
+	if item.BidHistory[0] != bidID {
+		t.Fatalf("expected history to keep original bid id %d, got %d", bidID, item.BidHistory[0])
+	}
+}
+
 func TestConcurrentBiddingSingleItem100Goroutines(t *testing.T) {
 	store := NewAuctionStore()
 	service := NewAuctionService(store)
@@ -358,6 +439,62 @@ func TestRetractWhenAuctionEndedFails(t *testing.T) {
 	_, err := service.RetractLastBid(userID, itemID)
 	if !errors.Is(err, ErrAuctionNotActive) {
 		t.Fatalf("expected ErrAuctionNotActive after auction end, got %v", err)
+	}
+}
+
+func TestPlaceBidRejectsNaNAndInf(t *testing.T) {
+	store := NewAuctionStore()
+	service := NewAuctionService(store)
+	userID, itemID := seedUserAndItem(t, store, 1_000, 100, 2)
+
+	_, err := service.PlaceBid(userID, itemID, math.NaN())
+	if !errors.Is(err, ErrInvalidBidAmount) {
+		t.Fatalf("expected ErrInvalidBidAmount for NaN, got %v", err)
+	}
+
+	_, err = service.PlaceBid(userID, itemID, math.Inf(1))
+	if !errors.Is(err, ErrInvalidBidAmount) {
+		t.Fatalf("expected ErrInvalidBidAmount for Inf, got %v", err)
+	}
+}
+
+func TestPlaceBidRejectsCancelledItem(t *testing.T) {
+	store := NewAuctionStore()
+	service := NewAuctionService(store)
+	userID, itemID := seedUserAndItem(t, store, 1_000, 100, 2)
+	store.mu.Lock()
+	store.itemsByID[itemID].Status = models.ItemStatusCancelled
+	store.mu.Unlock()
+
+	_, err := service.PlaceBid(userID, itemID, 150)
+	if !errors.Is(err, ErrAuctionNotActive) {
+		t.Fatalf("expected ErrAuctionNotActive, got %v", err)
+	}
+}
+
+func TestPlaceBidRejectsOutsideTimeWindow(t *testing.T) {
+	store := NewAuctionStore()
+	service := NewAuctionService(store)
+	userID := models.UserID(1)
+	itemID := models.ItemID(10)
+	now := time.Now().UTC()
+
+	store.mu.Lock()
+	store.usersByID[userID] = &models.User{ID: userID, Name: "u", Balance: 1_000}
+	store.itemsByID[itemID] = &models.Item{
+		ID:         itemID,
+		Name:       "item",
+		SellerID:   models.UserID(2),
+		StartPrice: 100,
+		StartTime:  now.Add(time.Hour),
+		EndTime:    now.Add(2 * time.Hour),
+		Status:     models.ItemStatusActive,
+	}
+	store.mu.Unlock()
+
+	_, err := service.PlaceBid(userID, itemID, 150)
+	if !errors.Is(err, ErrAuctionNotActive) {
+		t.Fatalf("expected ErrAuctionNotActive before start, got %v", err)
 	}
 }
 

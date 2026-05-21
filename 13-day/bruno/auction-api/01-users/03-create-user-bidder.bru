@@ -1,0 +1,18 @@
+meta {
+  name: Create User Bidder
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{base_url}}/users
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "name": "bidder",
+    "balance": 100000
+  }
+}

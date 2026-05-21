@@ -1,0 +1,5 @@
+auction.test
+profiles/*
+!profiles/.gitkeep
+docs/appendix/*
+!docs/appendix/.gitkeep
