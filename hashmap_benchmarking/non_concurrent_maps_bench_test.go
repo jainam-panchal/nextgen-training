@@ -8,9 +8,15 @@ import (
 
 var sink int
 
-var scales = []int{1_000, 10_000, 100_000, 1_000_000}
-var keySizes = []int{16, 64, 256}
-var shardCounts = []int{1, 16, 64}
+// var scales = []int{1_000, 10_000, 100_000, 1_000_000}
+// var keySizes = []int{16, 64, 256}
+// var shardCounts = []int{1, 16}
+
+var (
+	scales      = []int{100_000}
+	keySizes    = []int{32}
+	shardCounts = []int{1, 16}
+)
 
 const keyPrefix = "key-"
 
@@ -44,6 +50,17 @@ func BenchmarkNonConcurrentBuild(b *testing.B) {
 				}
 			})
 
+			b.Run(fmt.Sprintf("SyncMap/n=%d/keysize=%d", n, keySize), func(b *testing.B) {
+				b.ReportAllocs()
+				for i := 0; i < b.N; i++ {
+					m := NewSyncMap()
+					for idx, k := range keys {
+						m.Set(k, idx)
+					}
+					sink += m.Len()
+				}
+			})
+
 			for _, shards := range shardCounts {
 				b.Run(fmt.Sprintf("ShardedBuiltinMap/n=%d/keysize=%d/shards=%d", n, keySize, shards), func(b *testing.B) {
 					b.ReportAllocs()
@@ -67,6 +84,23 @@ func BenchmarkNonConcurrentRead(b *testing.B) {
 
 			b.Run(fmt.Sprintf("BuiltinMap/n=%d/keysize=%d", n, keySize), func(b *testing.B) {
 				m := NewBuiltinMap()
+				for idx, k := range keys {
+					m.Set(k, idx)
+				}
+				b.ReportAllocs()
+				keyIndex := 0
+				for i := 0; i < b.N; i++ {
+					v, _ := m.Get(keys[keyIndex])
+					sink += v
+					keyIndex++
+					if keyIndex >= len(keys) {
+						keyIndex = 0
+					}
+				}
+			})
+
+			b.Run(fmt.Sprintf("SyncMap/n=%d/keysize=%d", n, keySize), func(b *testing.B) {
+				m := NewSyncMap()
 				for idx, k := range keys {
 					m.Set(k, idx)
 				}
@@ -126,6 +160,23 @@ func BenchmarkNonConcurrentWriteUpdate(b *testing.B) {
 				sink += m.Len()
 			})
 
+			b.Run(fmt.Sprintf("SyncMap/n=%d/keysize=%d", n, keySize), func(b *testing.B) {
+				m := NewSyncMap()
+				for idx, k := range keys {
+					m.Set(k, idx)
+				}
+				b.ReportAllocs()
+				keyIndex := 0
+				for i := 0; i < b.N; i++ {
+					m.Set(keys[keyIndex], i)
+					keyIndex++
+					if keyIndex >= len(keys) {
+						keyIndex = 0
+					}
+				}
+				sink += m.Len()
+			})
+
 			for _, shards := range shardCounts {
 				b.Run(fmt.Sprintf("ShardedBuiltinMap/n=%d/keysize=%d/shards=%d", n, keySize, shards), func(b *testing.B) {
 					m := NewShardedBuiltinMap(shards)
@@ -158,6 +209,23 @@ func BenchmarkNonConcurrentDeleteOnly(b *testing.B) {
 				for i := 0; i < b.N; i++ {
 					b.StopTimer()
 					m := NewBuiltinMap()
+					for idx, k := range keys {
+						m.Set(k, idx)
+					}
+					b.StartTimer()
+
+					for _, k := range keys {
+						m.Delete(k)
+					}
+					sink += m.Len()
+				}
+			})
+
+			b.Run(fmt.Sprintf("SyncMap/n=%d/keysize=%d", n, keySize), func(b *testing.B) {
+				b.ReportAllocs()
+				for i := 0; i < b.N; i++ {
+					b.StopTimer()
+					m := NewSyncMap()
 					for idx, k := range keys {
 						m.Set(k, idx)
 					}

@@ -1,5 +1,7 @@
 package main
 
+import "sync"
+
 type HashMap interface {
 	Set(key string, value int)
 	Get(key string) (int, bool)
@@ -82,5 +84,38 @@ func hashString(value string) uint64 {
 		hash *= 1099511628211
 	}
 	return hash
+}
+
+type SyncMap struct {
+	items sync.Map
+}
+
+func NewSyncMap() *SyncMap {
+	return &SyncMap{}
+}
+
+func (m *SyncMap) Set(key string, value int) {
+	m.items.Store(key, value)
+}
+
+func (m *SyncMap) Get(key string) (int, bool) {
+	v, ok := m.items.Load(key)
+	if !ok {
+		return 0, false
+	}
+	return v.(int), true
+}
+
+func (m *SyncMap) Delete(key string) {
+	m.items.Delete(key)
+}
+
+func (m *SyncMap) Len() int {
+	count := 0
+	m.items.Range(func(_, _ interface{}) bool {
+		count++
+		return true
+	})
+	return count
 }
 
