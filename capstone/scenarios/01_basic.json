@@ -1,0 +1,21 @@
+{
+  "name": "01_basic",
+  "tickMs": 50,
+  "intersections": [
+    {"id": 0, "x": 0, "y": 0},
+    {"id": 1, "x": 1, "y": 0},
+    {"id": 2, "x": 2, "y": 0},
+    {"id": 3, "x": 3, "y": 0}
+  ],
+  "roads": [
+    {"id": 1, "from": 0, "to": 1, "distanceKm": 1.0, "speedKmph": 30, "congestion": 3},
+    {"id": 2, "from": 1, "to": 2, "distanceKm": 1.0, "speedKmph": 60, "congestion": 1},
+    {"id": 3, "from": 2, "to": 3, "distanceKm": 2.0, "speedKmph": 45, "congestion": 2},
+
+    {"id": 101, "from": 1, "to": 0, "distanceKm": 1.0, "speedKmph": 30, "congestion": 3},
+    {"id": 102, "from": 2, "to": 1, "distanceKm": 1.0, "speedKmph": 60, "congestion": 1},
+    {"id": 103, "from": 3, "to": 2, "distanceKm": 2.0, "speedKmph": 45, "congestion": 2}
+  ],
+  "vehicle": {"plate": "CAR-01", "type": "normal", "from": 0, "to": 3},
+  "events": []
+}

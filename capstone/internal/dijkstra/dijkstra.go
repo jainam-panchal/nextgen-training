@@ -2,21 +2,31 @@ package dijkstra
 
 import (
 	"math"
-	"time"
 
 	"github.com/jainam-panchal/nextgen-training/capstone/internal/ds"
 	"github.com/jainam-panchal/nextgen-training/capstone/internal/model"
 )
 
-func weight(r *model.Road) float64 {
+// WeightMinutes returns the travel time cost for traversing a road, in minutes.
+//
+// Formula: (distance / speed) * (1 + (congestion-1)/10) * 60
+//
+// Congestion acts as a multiplier:
+//   - congestion=1  → multiply by 1.0 (free flow)
+//   - congestion=5  → multiply by 1.4 (moderate)
+//   - congestion=10 → multiply by 1.9 (heavy)
+func WeightMinutes(r *model.Road) float64 {
 	if r.SpeedLimit <= 0 {
 		return r.Distance
 	}
 	base := r.Distance / r.SpeedLimit
 	mult := 1.0 + float64(r.Congestion-1)/10.0
-	return base * mult
+	return base * mult * 60.0
 }
 
+// ShortestPath runs Dijkstra's algorithm on the graph from src to dst.
+// Returns the path as a slice of node IDs and the total travel time in minutes.
+// Returns (nil, +Inf) if dst is unreachable.
 func ShortestPath(g model.GraphReader, src, dst int) ([]int, float64) {
 	n := g.Nodes()
 	dist := make([]float64, n)
@@ -45,7 +55,7 @@ func ShortestPath(g model.GraphReader, src, dst int) ([]int, float64) {
 		}
 		for _, e := range g.Neighbors(u) {
 			v := e.To
-			alt := dist[u] + weight(e.Road)
+			alt := dist[u] + WeightMinutes(e.Road)
 			if alt < dist[v] {
 				dist[v] = alt
 				prev[v] = u
@@ -58,12 +68,11 @@ func ShortestPath(g model.GraphReader, src, dst int) ([]int, float64) {
 		return nil, math.Inf(1)
 	}
 
+	// Reconstruct path from dst back to src.
 	var path []int
 	for u := dst; u != -1; u = prev[u] {
 		path = append([]int{u}, path...)
 	}
-
-	_ = time.Second
 
 	return path, dist[dst]
 }
