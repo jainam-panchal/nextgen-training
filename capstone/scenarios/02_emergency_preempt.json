@@ -1,0 +1,21 @@
+{
+  "name": "02_emergency_preempt",
+  "tickMs": 200,
+  "intersections": [
+    {"id": 0, "x": 0, "y": 0},
+    {"id": 1, "x": 0, "y": 1},
+    {"id": 2, "x": 1, "y": 0},
+    {"id": 3, "x": 1, "y": 1}
+  ],
+  "bidirectional": true,
+  "roads": [
+    [0, 2, 1.0, 30, 3],
+    [2, 3, 2.0, 50, 1],
+    [1, 3, 1.5, 40, 2],
+    [0, 1, 6.0, 25, 4]
+  ],
+  "vehicle": {"plate": "CAR-01", "type": "normal", "from": 0, "to": 3},
+  "events": [
+    {"tick": 5, "type": "emergency", "plate": "AMB-01", "from": 0, "to": 3}
+  ]
+}
