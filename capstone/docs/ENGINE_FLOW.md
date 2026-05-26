@@ -12,20 +12,17 @@ Tick driver broadcasts tickN via sync.Cond
          │
          ├──► Intersection goroutines (each independently):
          │     1. intersection.step()
-         │     2. markIntersectionProcessed(id, tickN)
          │
          ├──► Vehicle goroutines (each independently):
          │     1. vehicle.step()
-         │     2. markVehicleProcessed(plate, tickN)
+         │     2. atomic.StoreInt64(&v.processedTick, last)
          │
          └──► Congestion updater:
-               1. clear expired emergency corridor
-               2. update all road congestion
-               3. markCongestionProcessed(tickN)
+               1. clear expired emergency corridor (if tick > emergencyUntilTick)
+               2. recompute all road congestion from occupancy
          │
          ▼
-CLI waits for ALL processing via WaitAllProcessed(tickN)
-CLI reads and prints VehicleStatus
+CLI reads VehicleStatus and prints state-change output
 ```
 
 ## Line-by-Line: engine.Start()
@@ -95,8 +92,7 @@ func (i *intersection) run(ctx context.Context, e *Engine) {
         if !ok { return }
         last = n
         if ctx.Err() != nil { return }
-        i.step()                                  // <-- advance signal phase
-        e.markIntersectionProcessed(i.id, n)       // <-- mark done for barrier
+        i.step()      // <-- advance signal phase (preempt → countdown → transition)
     }
 }
 ```
@@ -104,7 +100,7 @@ func (i *intersection) run(ctx context.Context, e *Engine) {
 The pattern is identical for every goroutine:
 1. `waitTick(last)` — blocks until tick `last+1` is available
 2. Do work
-3. `mark*Processed` — tell the barrier that this goroutine finished tick N
+3. Loop back to wait for next tick
 
 ```go
     // Congestion updater
@@ -195,7 +191,7 @@ The phase cycle is: `Green-NS → Yellow-NS → Green-EW → Yellow-EW → Green
 ## Line-by-Line: vehicle.step()
 
 ```go
-func (v *vehicle) step(ctx context.Context, e *Engine, tk sim.Tick) {
+func (v *vehicle) step(e *Engine) {
     v.mu.Lock()
     defer v.mu.Unlock()
 
@@ -206,8 +202,10 @@ func (v *vehicle) step(ctx context.Context, e *Engine, tk sim.Tick) {
         v.remainingRoad--
         if v.remainingRoad > 0 { return }   // still travelling
         // Arrived at next intersection
-        v.at = v.nextIntersection
+        v.at = v.path[v.idx]                 // idx was incremented on entry
         v.state = VehicleStateAtIntersection
+        v.queued = false
+        v.queuedGroup = ""
     }
 
     // Phase 2: Check if at destination
@@ -216,38 +214,38 @@ func (v *vehicle) step(ctx context.Context, e *Engine, tk sim.Tick) {
         return
     }
 
-    // Phase 3: Re-route periodically
-    if tk.N - v.lastRouteTick >= ... {
-        path, _, _ := e.route(v.at, v.to, v.kind)
-        v.path = path; v.idx = 0
-    }
-
-    // Phase 4: Get next hop from route
+    // Phase 3: Check signal at current intersection
     from := v.path[v.idx]
     to := v.path[v.idx+1]
+    inter := e.signals[from]
+    group := movementDirection(from, to)
 
-    // Phase 5: Check signal
-    if phaseAllows(phase, movementDirection(from, to)) {
+    if phaseAllows(inter.currentPhase(), group) {
         // GREEN — enter road
-        v.state = VehicleStateOnRoad
+        if v.queued { inter.dequeue(v.queuedGroup) }
+        roadID, travelTicks, ok := e.roadForHop(from, to)
+        if !ok { return }
+        v.onRoadID = roadID
         v.remainingRoad = travelTicks
-        v.nextIntersection = to
+        v.state = VehicleStateOnRoad
         v.idx++
     } else {
         // RED — queue at intersection
+        if !v.queued { inter.enqueue(group); v.queued = true }
         v.state = VehicleStateWaitingSignal
     }
 }
 ```
 
 Each vehicle tick:
-1. If currently **on a road**, decrement the travel timer. When it hits 0, the vehicle arrives at the next intersection.
+1. If currently **on a road**, decrement the travel timer. When it hits 0, the vehicle arrives at the next intersection (using `path[idx]` as destination, which was incremented when entering the road).
 2. If at destination (`v.at == v.to`), mark arrived.
-3. **Re-route** every `ReRouteEveryTicks` ticks — recalculates path with current congestion.
-4. Look at the **next hop** in the path.
-5. Check the **signal phase** at the current intersection:
-   - If green in the right direction → enter the road (set travel timer, change state to `on_road`)
-   - If red → queue up, change state to `waiting_signal`
+3. Look up the **next hop** in the path.
+4. Check the **signal phase** at the current intersection:
+   - If green in the right direction → look up road weight via `roadForHop()` (reads live congestion), enter the road with `ceil(weight)` ticks, advance `idx`.
+   - If red → enqueue in NS/EW group, change state to `waiting_signal`.
+
+Note: There is no periodic reroute (`ReRouteEveryTicks` was removed) and no `nextIntersection` field. The route path is fixed at registration; only per-hop travel time adapts to live congestion.
 
 ## Line-by-Line: emergency corridor
 
@@ -290,34 +288,17 @@ When emergency is dispatched:
 
 **Corridor expiry**: The congestion updater clears `roadOnCorr` and sets `emergencyUntilTick=0` when the current tick exceeds the expiry.
 
-## Line-by-Line: WaitAllProcessed (the barrier)
+## Line-by-Line: WaitVehicleProcessed (test synchronization)
 
 ```go
-func (e *Engine) WaitAllProcessed(tickN int64) bool {
-    e.procMu.Lock()
-    defer e.procMu.Unlock()
-    for !e.tickClosed && !e.allProcessedLocked(tickN) {
-        e.procCond.Wait()          // blocks until all goroutines catch up
+func (e *Engine) WaitVehicleProcessed(plate string, tickN int64) {
+    v := e.vehicles[plate]
+    for atomic.LoadInt64(&v.processedTick) < tickN {
     }
-    return e.allProcessedLocked(tickN)
-}
-
-func (e *Engine) allProcessedLocked(tickN int64) bool {
-    for id := 0; id < e.cfg.NumIntersections; id++ {
-        if e.interLast[id] < tickN { return false }
-    }
-    for _, v := range e.vehicleLast {
-        if v < tickN { return false }
-    }
-    return e.congLast >= tickN
 }
 ```
 
-This is used by the CLI to ensure it reads **consistent state**. Without this barrier:
-- Signal might have processed tick 10, but the vehicle might still be on tick 9
-- The CLI would read stale vehicle position
-
-Each goroutine calls `mark*Processed(tickN)` after finishing tick N. The barrier wakes up, checks every goroutine, and returns when all have caught up.
+Tests advance the clock and then busy-wait on a specific vehicle's `processedTick`. This replaces the old full-barrier (`WaitAllProcessed`) which was removed. Each vehicle sets `atomic.StoreInt64(&v.processedTick, last)` after each `step()` call.
 
 ## Line-by-Line: Congestion Update
 
@@ -354,9 +335,8 @@ Every tick:
 
 ```go
 func ShortestPath(g model.GraphReader, src, dst int) ([]int, float64) {
-    // Initialize all distances to infinity
-    // Set dist[src] = 0
-    // Push src onto priority queue with priority 0
+    // Initialize dist = Infinity, prev = -1
+    // Set dist[src] = 0, push src onto PQ with priority 0
     for {
         u, d, ok := pq.PopItem()    // get node with smallest distance
         if !ok { break }

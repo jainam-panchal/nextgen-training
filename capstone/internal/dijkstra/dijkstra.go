@@ -37,7 +37,6 @@ func ShortestPath(g model.GraphReader, src, dst int) ([]int, float64) {
 	}
 
 	pq := ds.NewPriorityQueue[int]()
-	pq.Init()
 
 	dist[src] = 0
 	pq.PushItem(src, 0)

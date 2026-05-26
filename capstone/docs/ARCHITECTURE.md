@@ -13,8 +13,7 @@ capstone/
 │   ├── dijkstra/            — Shortest path routing
 │   │   └── dijkstra.go
 │   ├── model/               — Graph data structures
-│   │   ├── topology.go       — Graph, Road, Edge types + demo generator
-│   │   └── topology_safe.go — Thread-safe wrapper (not used by engine currently)
+│   │   └── topology.go       — Graph, Road, Edge types, GraphReader, demo generator
 │   ├── scenario/            — Scenario JSON loader + builder
 │   │   └── scenario.go
 │   ├── httpapi/             — REST API handlers
@@ -62,9 +61,9 @@ capstone/
 7. Main loop:
      a) WaitNextTick() → blocks until next simulation tick
      b) Process scheduled events (emergency dispatch)
-     c) WaitAllProcessed() → waits for ALL goroutines to finish tick N
-     d) VehicleStatus() → read current state
-     e) Print state-change line
+     c) VehicleStatus() → read current vehicle state
+     d) Detect state change (suppress repeats)
+     e) Print one-line state-change output
 ```
 
 ### Server (`cmd/server/main.go`)
@@ -134,9 +133,9 @@ Tick Driver:                        Waiters (signals, vehicles, congestion):
                                       process tick
 ```
 
-### 3. Progress Barrier (WaitAllProcessed)
+### 3. Per-Vehicle Processed Tick (WaitVehicleProcessed)
 
-After the CLI advances the tick, it needs to know when ALL goroutines have finished processing that tick before reading state. The `WaitAllProcessed()` method tracks the highest tick each goroutine has completed via `markIntersectionProcessed()`, `markVehicleProcessed()`, and `markCongestionProcessed()`.
+Tests need to synchronize with a specific vehicle's goroutine. Rather than a full barrier (which we removed), each vehicle sets `v.processedTick` atomically after each `step()`. Tests call `WaitVehicleProcessed(plate, tickN)` which busy-waits until the vehicle has processed that tick. This is lighter than a condvar-based barrier and sufficient for test determinism.
 
 ### 4. graphView — Dynamic Weight Reader
 
@@ -144,7 +143,11 @@ The engine implements `model.GraphReader` via `graphView`. When Dijkstra calls `
 - Normal congestion (`1..10`)
 - Emergency corridor penalty (congestion=10, distance×50)
 
-### 5. Road Weights are Minutes
+### 5. No Periodic Reroute (Simplified Step)
+
+The vehicle state machine no longer has periodic reroute (`ReRouteEveryTicks` was removed), no `nextIntersection`/`from`/`lastRouteTick` fields, and no `procCond` barrier. The route path is fixed at registration — only the per-hop travel time adapts to live congestion via `roadForHop()`. This simplifies the step function from ~100 lines to ~60 and removes 3 fields from the vehicle struct.
+
+### 6. Road Weights are Minutes
 
 `dijkstra.WeightMinutes(road)` computes travel time in **minutes**:
 ```
@@ -155,7 +158,7 @@ weight = base * mult
 
 The result is in minutes, and the conversion to ticks is `ceil(weight)` with a minimum of 1 tick. This means each hop takes at least 1 tick.
 
-### 6. Column-Major Grid IDs
+### 7. Column-Major Grid IDs
 
 Grid scenarios use **column-major** ID ordering: IDs increase vertically down each column, then wrap to the next column. This makes `movementDirection(from, to)` simple:
 - `abs(to - from) == 1` → NS (vertical)
@@ -175,22 +178,22 @@ Path 0→1: diff=1 → NS (vertical)
 ## Goroutine Lifecycle
 
 ```
-engine.Start()
+engine.Start() → launches:
   │
-  ├── Tick Driver Goroutine
-  │     └── reads from clock.C(), broadcasts tickN, runs until ctx cancelled
+  ├── Tick Driver Goroutine (1)
+  │     └── reads from clock.C(), broadcasts tickN via sync.Cond
   │
-  ├── Intersection Goroutine (× NumIntersections)
-  │     └── waits for each tick, calls intersection.step() (advance phase or remain)
+  ├── Intersection Goroutines (× NumIntersections)
+  │     └── waitTick → intersection.step() (signal phase advance)
   │
-  └── Congestion Updater Goroutine
-        └── waits for each tick, updates all road congestion, clears expired corridor
+  └── Congestion Updater Goroutine (1)
+        └── waitTick → updateCongestion() (recalc all roads, clear expired corridor)
 
-engine.RegisterVehicle()
-  └── Vehicle Goroutine
-        └── waits for each tick, calls vehicle.step() (move/wait/arrive)
+engine.RegisterVehicle() → launches:
+  └── Vehicle Goroutine (1 per vehicle)
+        └── waitTick → vehicle.step() (move/wait/arrive) → store processedTick
 
-engine.Stop() / ctx cancelled
-  └── tick driver closes → cond.Broadcast wakes all → goroutines exit
-  └── sync.WaitGroup waits for all
+engine.Stop() / ctx cancelled:
+  └── tick driver exits → cond.Broadcast wakes all → goroutines see tickClosed → return
+  └── sync.WaitGroup.Wait() — all goroutines confirmed done
 ```

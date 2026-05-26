@@ -48,13 +48,18 @@ tickCond.Wait() does:
 
 This guarantees there's no race between "check tickN" and "wait for next tick."
 
-## 4. WaitAllProcessed — The Progress Barrier
+## 4. WaitVehicleProcessed — Per-Vehicle Sync (Replaces Barrier)
 
-Ticks are broadcast, but goroutines process at different speeds. A signal goroutine might finish tick 10 quickly, while a vehicle goroutine is still on tick 9.
+The old `WaitAllProcessed` barrier tracked every goroutine's tick progress via `mark*Processed()` calls and a shared `sync.Cond`. This was removed.
 
-**The barrier** (`WaitAllProcessed`) blocks the CLI until every goroutine has finished a given tick. Each goroutine calls `mark*Processed(tickN)` when done. The barrier checks `interLast`, `vehicleLast`, and `congLast`.
+Instead, each vehicle atomically stores its last processed tick after every `step()`:
 
-**Without this:** The CLI might print stale data (vehicle appears at old position because its goroutine hasn't processed the latest tick yet).
+```go
+v.step(e)
+atomic.StoreInt64(&v.processedTick, last)
+```
+
+Tests call `WaitVehicleProcessed(plate, tickN)` which busy-waits until that specific vehicle reaches the target tick. This is lighter and sufficient for test determinism — the CLI doesn't need a barrier because it only reads one vehicle's state.
 
 ## 5. Dijkstra — Shortest Path with Dynamic Weights
 
@@ -227,7 +232,17 @@ Every shared data structure has its own mutex strategy:
 
 No two goroutines write to the same position without synchronization. The `graphView.Neighbors()` snapshot pattern (copy Road struct under lock, return copy) ensures Dijkstra never reads a partially-updated road.
 
-## 13. Goroutine Safe Shutdown
+## 13. Single-Condvar Design
+
+The engine originally had two `sync.Cond` instances: `tickCond` (tick broadcast) and `procCond` (progress barrier). The `procCond` was removed because:
+
+- It added ~80 lines of machinery (`procMu`, `procCond`, `interLast`, `vehicleLast`, `congLast`, `WaitAllProcessed`, `mark*Processed`, `allProcessedLocked`)
+- The CLI doesn't need a full barrier — it only reads one vehicle's state, which is consistent after `waitTick` returns
+- Tests use the lighter `WaitVehicleProcessed` per-vehicle atomic counter instead
+
+Now the engine has exactly one `sync.Cond` (`tickCond`), owned solely by the tick driver. All goroutines (intersections, vehicles, congestion updater) are symmetric waiters.
+
+## 14. Goroutine Safe Shutdown
 
 ```
 engine.Stop() →

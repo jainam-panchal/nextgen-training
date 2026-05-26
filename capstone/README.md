@@ -9,7 +9,7 @@ It is intentionally learning-focused:
 
 ## Assumptions (Learning Contract)
 
-- City has `N=20` intersections with IDs `0..N-1`.
+- City has `N` intersections with IDs `0..N-1` (defined by scenario JSON or demo graph).
 - Roads are directed edges in a weighted adjacency list.
 - Each road has:
   - `distance` (km)
@@ -144,23 +144,11 @@ go test ./...
 go test -race ./...
 ```
 
-Essential end-to-end test cases:
-- **HTTP API** (`internal/httpapi/router_test.go`):
-  - Health check: `GET /healthz` returns 200.
-  - Register + route + simulate arrival:
-    - `POST /vehicles` registers a vehicle
-    - simulation clock is stepped
-    - `GET /stats` eventually reports `VehiclesArrived >= 1`
-    - `GET /route` returns a valid path
-  - Emergency dispatch preempts signals:
-    - `POST /emergency`
-    - step simulation clock
-    - `GET /signals/0` reports `preempt=true` and a green phase
-- **Scenario + CLI** (`internal/scenario/scenario_test.go`, `internal/engine/engine_test.go`):
-  - Scenario load and validation (missing fields, bad types, non-contiguous IDs)
-  - Vehicle status read API (register, step, assert status fields)
-  - Single-vehicle arrival on a chain graph (manual clock steps until `VehicleStateArrived`)
-  - Emergency dispatch preempts signals (normal vehicle active, emergency dispatched, signal at intersection 0 reports `preempt=true`)
+Test suites:
+- **HTTP API** (`internal/httpapi/router_test.go`): health check, register+route+arrival, emergency preemption
+- **Engine** (`internal/engine/engine_test.go`): signal phase order, preemption forces green, 100-vehicle race safety, vehicle status, scenario arrival (chain graph), emergency preempt scenario
+- **Scenario** (`internal/scenario/scenario_test.go`): load + validate all formats (verbose, compact, grid, bidirectional), build, non-contiguous ID rejection
+- **Dijkstra** (`internal/dijkstra/dijkstra_test.go`): shortest path correctness on demo graph, same-node path
 
 ## Profiling
 

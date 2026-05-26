@@ -81,9 +81,4 @@ type GraphReader interface {
 	GetRoad(roadID int) (*Road, bool)
 }
 
-// RoadUpdater is the interface for updating congestion values.
-// Currently unused by the engine (congestion updates are internal).
-type RoadUpdater interface {
-	UpdateCongestion(roadID int, delta int) error
-	SetCongestion(roadID int, v int) error
-}
+
