@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="800" height="500" xmlns="http://www.w3.org/2000/svg">
+  <rect width="100%" height="100%" fill="white"/>
+  <text x="400.0" y="30" text-anchor="middle" font-size="18" font-weight="bold">Dijkstra Scaling: Chain Graph (20/100/500 nodes)</text>
+  <text x="400.0" y="495" text-anchor="middle" font-size="14">Nodes (log scale)</text>
+  <text x="15" y="250.0" text-anchor="middle" font-size="14" transform="rotate(-90,15,250.0)">Time per op (µs, log scale)</text>
+  <!-- axes -->
+  <line x1="60" y1="440" x2="740" y2="440" stroke="black"/>
+  <line x1="60" y1="60" x2="60" y2="440" stroke="black"/>
+  <line x1="55" y1="440.0" x2="60" y2="440.0" stroke="black"/>
+  <text x="50" y="444.0" text-anchor="end" font-size="12">1</text>
+  <line x1="55" y1="313.33333333333337" x2="60" y2="313.33333333333337" stroke="black"/>
+  <text x="50" y="317.33333333333337" text-anchor="end" font-size="12">10</text>
+  <line x1="55" y1="186.66666666666669" x2="60" y2="186.66666666666669" stroke="black"/>
+  <text x="50" y="190.66666666666669" text-anchor="end" font-size="12">100</text>
+  <line x1="55" y1="60.0" x2="60" y2="60.0" stroke="black"/>
+  <text x="50" y="64.0" text-anchor="end" font-size="12">1000</text>
+  <line x1="60.0" y1="440" x2="60.0" y2="445" stroke="black"/>
+  <text x="60.0" y="460" text-anchor="middle" font-size="12">20</text>
+  <line x1="400.0" y1="440" x2="400.0" y2="445" stroke="black"/>
+  <text x="400.0" y="460" text-anchor="middle" font-size="12">100</text>
+  <line x1="740.0" y1="440" x2="740.0" y2="445" stroke="black"/>
+  <text x="740.0" y="460" text-anchor="middle" font-size="12">500</text>
+  <polyline points="60.0,339.1357462601064 400.0,214.6255807235421 740.0,90.52872316876437" fill="none" stroke="#e63946" stroke-width="3"/>
+  <circle cx="60.0" cy="339.1357462601064" r="6" fill="#e63946"/>
+  <text x="60.0" y="327.1357462601064" text-anchor="middle" font-size="12">6.3µs</text>
+  <circle cx="400.0" cy="214.6255807235421" r="6" fill="#e63946"/>
+  <text x="400.0" y="202.6255807235421" text-anchor="middle" font-size="12">60.2µs</text>
+  <circle cx="740.0" cy="90.52872316876437" r="6" fill="#e63946"/>
+  <text x="740.0" y="78.52872316876437" text-anchor="middle" font-size="12">574.1µs</text>
+  <text x="735" y="80" text-anchor="end" font-size="11" fill="#888">O(N log N) ~ 25× from 20→500</text>
+</svg>

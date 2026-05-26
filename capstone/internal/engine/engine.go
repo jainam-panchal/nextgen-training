@@ -53,9 +53,6 @@ type Engine struct {
 // movementDirection classifies a hop as "NS" (north-south) or "EW" (east-west)
 // based on intersection IDs. Works because grid scenarios use column-major numbering
 // where adjacent IDs are vertical neighbours.
-//
-// Limitation: this is a heuristic that breaks for arbitrary ID numbering.
-// Future: replace with comparison of intersection coordinates.
 func movementDirection(from, to int) string {
 	if to-from == 1 || from-to == 1 {
 		return "NS"

@@ -52,7 +52,6 @@ func GenerateDemoGraph() *Graph {
 	}
 
 	// A few shortcut roads to make routing non-trivial.
-	// These are treated as EW movement by the engine's default movement rule.
 	shortcuts := [][4]float64{
 		// from, to, distanceKm, speedKmph
 		{0, 5, 3.2, 50},
