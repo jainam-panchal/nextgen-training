@@ -52,7 +52,6 @@ func GenerateDemoGraph() *Graph {
 	}
 
 	// A few shortcut roads to make routing non-trivial.
-	// These are treated as EW movement by the engine's default movement rule.
 	shortcuts := [][4]float64{
 		// from, to, distanceKm, speedKmph
 		{0, 5, 3.2, 50},
@@ -82,9 +81,4 @@ type GraphReader interface {
 	GetRoad(roadID int) (*Road, bool)
 }
 
-// RoadUpdater is the interface for updating congestion values.
-// Currently unused by the engine (congestion updates are internal).
-type RoadUpdater interface {
-	UpdateCongestion(roadID int, delta int) error
-	SetCongestion(roadID int, v int) error
-}
+

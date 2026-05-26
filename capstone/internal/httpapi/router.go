@@ -102,12 +102,7 @@ func (s *Server) handleEmergency(w http.ResponseWriter, r *http.Request) {
 // GET /congestion — congestion report for all roads.
 func (s *Server) handleCongestion(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	resp, err := s.e.Congestion(ctx)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, resp)
+	writeJSON(w, http.StatusOK, s.e.Congestion(ctx))
 }
 
 // GET /signals/{id} — signal status at one intersection.
@@ -134,12 +129,7 @@ func (s *Server) handleSignalStatus(w http.ResponseWriter, r *http.Request) {
 // GET /stats — simulation statistics.
 func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	resp, err := s.e.Stats(ctx)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, resp)
+	writeJSON(w, http.StatusOK, s.e.Stats(ctx))
 }
 
 func atoiParam(v string) (int, error) {

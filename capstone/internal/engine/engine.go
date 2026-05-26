@@ -53,9 +53,6 @@ type Engine struct {
 // movementDirection classifies a hop as "NS" (north-south) or "EW" (east-west)
 // based on intersection IDs. Works because grid scenarios use column-major numbering
 // where adjacent IDs are vertical neighbours.
-//
-// Limitation: this is a heuristic that breaks for arbitrary ID numbering.
-// Future: replace with comparison of intersection coordinates.
 func movementDirection(from, to int) string {
 	if to-from == 1 || from-to == 1 {
 		return "NS"
@@ -173,23 +170,6 @@ func (e *Engine) Start(ctx context.Context) {
 			e.updateCongestion(sim.Tick{N: n})
 		}
 	}()
-}
-
-// Tick returns the current tick number.
-func (e *Engine) Tick() int64 {
-	e.tickMu.Lock()
-	defer e.tickMu.Unlock()
-	return e.tickN
-}
-
-// EmergencyActive reports whether an emergency corridor is active and until which tick.
-func (e *Engine) EmergencyActive() (active bool, untilTick int64) {
-	e.roadMu.RLock()
-	defer e.roadMu.RUnlock()
-	if e.emergencyUntilTick == 0 {
-		return false, 0
-	}
-	return true, e.emergencyUntilTick
 }
 
 // Stop cancels the run context, closes tick broadcast, and waits for all goroutines.
@@ -439,7 +419,10 @@ func (e *Engine) DispatchEmergency(ctx context.Context, req DispatchEmergencyReq
 
 	e.setEmergencyCorridor(path)
 
-	_, _ = e.RegisterVehicle(context.Background(), RegisterVehicleRequest{Plate: req.Plate, From: req.From, To: req.To, Type: VehicleTypeEmergency})
+	_, err = e.RegisterVehicle(context.Background(), RegisterVehicleRequest{Plate: req.Plate, From: req.From, To: req.To, Type: VehicleTypeEmergency})
+	if err != nil {
+		return EmergencyResponse{}, err
+	}
 
 	return EmergencyResponse{RouteResponse: RouteResponse{Path: path, ETAMinutes: eta}, PreemptionTicks: e.cfg.PreemptionTicks}, nil
 }
@@ -533,7 +516,7 @@ type CongestionResponse struct {
 }
 
 // Congestion returns congestion data for all roads, sorted by average congestion descending.
-func (e *Engine) Congestion(_ context.Context) (CongestionResponse, error) {
+func (e *Engine) Congestion(_ context.Context) CongestionResponse {
 	e.roadMu.RLock()
 	defer e.roadMu.RUnlock()
 	roads := make([]RoadCongestion, 0, len(e.roadByID))
@@ -555,7 +538,7 @@ func (e *Engine) Congestion(_ context.Context) (CongestionResponse, error) {
 	if len(roads) < top {
 		top = len(roads)
 	}
-	return CongestionResponse{Roads: roads, Top5: append([]RoadCongestion(nil), roads[:top]...)}, nil
+	return CongestionResponse{Roads: roads, Top5: append([]RoadCongestion(nil), roads[:top]...)}
 }
 
 func meanInts(v []int) float64 {
@@ -576,7 +559,7 @@ type Stats struct {
 }
 
 // Stats returns summary counts.
-func (e *Engine) Stats(_ context.Context) (Stats, error) {
+func (e *Engine) Stats(_ context.Context) Stats {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	arrived := 0
@@ -588,7 +571,7 @@ func (e *Engine) Stats(_ context.Context) (Stats, error) {
 			arrived++
 		}
 	}
-	return Stats{VehiclesTotal: len(e.vehicles), VehiclesArrived: arrived}, nil
+	return Stats{VehiclesTotal: len(e.vehicles), VehiclesArrived: arrived}
 }
 
 // route computes a shortest path using Dijkstra. The graphView adapts the road
@@ -670,11 +653,6 @@ func (g *graphView) GetRoad(roadID int) (*model.Road, bool) {
 	return &r, true
 }
 
-// UpdateCongestion and SetCongestion exist to satisfy the RoadUpdater interface
-// but are not used by the engine (congestion is updated internally by updateCongestion).
-func (g *graphView) UpdateCongestion(int, int) error { return errors.New("unsupported") }
-func (g *graphView) SetCongestion(int, int) error    { return errors.New("unsupported") }
-
 // --- Vehicle implementation ---
 
 // vehicle holds the mutable state for one vehicle in the simulation.
@@ -708,7 +686,7 @@ func (v *vehicle) run(ctx context.Context, e *Engine) {
 			return
 		}
 		last = n
-		v.step(ctx, e, sim.Tick{N: n})
+		v.step(e)
 		atomic.StoreInt64(&v.processedTick, last)
 	}
 }
@@ -722,11 +700,9 @@ func (v *vehicle) run(ctx context.Context, e *Engine) {
 //	       └──(signal red)──→ WaitingSignal ──(signal green)─────────────┘
 //	                                                                     │
 //	                              AtIntersection ──(at == to)─────────────→ Arrived
-func (v *vehicle) step(ctx context.Context, e *Engine, tk sim.Tick) {
+func (v *vehicle) step(e *Engine) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
-	_ = ctx
-	_ = tk
 
 	// Already arrived — nothing to do.
 	if v.state == VehicleStateArrived {
@@ -760,17 +736,6 @@ func (v *vehicle) step(ctx context.Context, e *Engine, tk sim.Tick) {
 		return
 	}
 
-	// Ensure we have a valid route from current position.
-	if len(v.path) == 0 || v.idx >= len(v.path) || v.path[v.idx] != v.at {
-		path, _, err := e.route(v.at, v.to, v.kind)
-		if err != nil {
-			return
-		}
-		v.path = path
-		v.idx = 0
-	}
-
-	// Safety check: if we're past the last hop, nothing to do (should not normally happen).
 	if v.idx >= len(v.path)-1 {
 		return
 	}
@@ -815,11 +780,6 @@ func (v *vehicle) step(ctx context.Context, e *Engine, tk sim.Tick) {
 	if !v.queued {
 		inter.enqueue(group)
 		v.queued = true
-		v.queuedGroup = group
-	} else if v.queuedGroup != group {
-		// Queue group changed (e.g., reroute switched NS↔EW), swap counters.
-		inter.dequeue(v.queuedGroup)
-		inter.enqueue(group)
 		v.queuedGroup = group
 	}
 	v.state = VehicleStateWaitingSignal

@@ -28,8 +28,7 @@ capstone/
 ├── internal/dijkstra/
 │   └── dijkstra.go           ← ShortestPath + WeightMinutes
 ├── internal/model/
-│   ├── topology.go           ← Graph, Road, Edge, GraphReader interface
-│   └── topology_safe.go      ← ThreadSafeGraph (reference, not used by engine)
+│   └── topology.go           ← Graph, Road, Edge, GraphReader interface
 ├── internal/scenario/
 │   └── scenario.go           ← JSON loading, validation, graph building
 ├── internal/httpapi/

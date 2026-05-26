@@ -9,7 +9,7 @@ It is intentionally learning-focused:
 
 ## Assumptions (Learning Contract)
 
-- City has `N=20` intersections with IDs `0..N-1`.
+- City has `N` intersections with IDs `0..N-1` (defined by scenario JSON or demo graph).
 - Roads are directed edges in a weighted adjacency list.
 - Each road has:
   - `distance` (km)
@@ -27,8 +27,7 @@ It is intentionally learning-focused:
 - Emergency dispatch:
   - computes the fastest route
   - preempts signals on that route to green for a bounded duration
-  - normal vehicles avoid the emergency cor
-  ridor via a heavy routing penalty
+  - normal vehicles avoid the emergency corridor via a heavy routing penalty
 
 ## Data Structure Mapping
 
@@ -54,49 +53,14 @@ go run ./cmd/cli -scenario scenarios/02_emergency_preempt.json
 go run ./cmd/cli -scenario scenarios/03_grid.json
 ```
 
-The CLI prints a fixed ASCII map once then one-line tick updates until the vehicle arrives or `-max-ticks` is reached. The `-scenario` flag is required. Scenarios are single-vehicle JSON files under `scenarios/`.
+The CLI prints a fixed ASCII map once then one-line state-change tick updates until the vehicle arrives or `-max-ticks` is reached. The `-scenario` flag is required. Scenarios are single-vehicle JSON files under `scenarios/`.
 
-### Per-Tick Output Format
+Roads support three JSON formats:
+- **Verbose**: objects with `id`, `from`, `to`, `distanceKm`, `speedKmph`, `congestion`
+- **Compact**: `[[from, to, dist, speed, cong], ...]` arrays
+- **Grid shorthand**: `"grid": {"cols": 5, "rows": 4, "cellDist": 1.0, "speed": 30, "congestion": 2}`
 
-Each line shows the vehicle's state at that simulation tick:
-
-**While travelling on a road (`on_road`):**
-```
-tick=9     CAR-01   normal    on_road     from=2   to=3   rem=3    eta=4.4min  emergency=on(until=tick 65)
-```
-| Field | Meaning |
-|-------|---------|
-| `tick=9` | Simulation tick number |
-| `CAR-01` | Vehicle plate |
-| `normal` | Vehicle type (`normal` / `emergency`) |
-| `on_road` | State: travelling between intersections |
-| `from=2` | Intersection departed from |
-| `to=3` | Intersection heading to |
-| `rem=3` | Remaining ticks before arriving at the next intersection |
-| `eta=4.4min` | ETA computed once by Dijkstra at registration (simulated minutes) |
-| `emergency=on(until=tick 65)` | Emergency corridor active until tick 65 |
-
-**While waiting at a red signal (`waiting_signal` / `at_intersection`):**
-```
-tick=4     CAR-01   normal    waiting_signal at=0   dest=3   signal=Green-NS   rem=9   q(ns=0 ,ew=1 ) preempt=false  eta=4.4min  emergency=off
-```
-| Field | Meaning |
-|-------|---------|
-| `at=0` | Current intersection |
-| `dest=3` | Final destination |
-| `signal=Green-NS` | Traffic signal phase: cycles `Green-NS` → `Yellow-NS` → `Green-EW` → `Yellow-EW` |
-| `rem=9` | Remaining ticks in the current signal phase |
-| `q(ns=0, ew=1)` | Queued vehicles waiting for each direction |
-| `preempt=false` | `true` = signal forced green by emergency corridor |
-| `eta=4.4min` | Dijkstra ETA |
-
-**When arrived:**
-```
-tick=12    CAR-01   normal    arrived     at=3   dest=3   actual=12/4.4min  eta=4.4min  emergency=off
-```
-`actual=12/4.4min` = took 12 simulation ticks to complete a 4.4-minute journey.
-
-### How Travel Time is Calculated
+Set `"bidirectional": true` at root to auto-generate reverse roads for all directed roads.
 
 ### How Travel Time is Calculated
 
@@ -180,31 +144,36 @@ go test ./...
 go test -race ./...
 ```
 
-Essential end-to-end test cases:
-- **HTTP API** (`internal/httpapi/router_test.go`):
-  - Health check: `GET /healthz` returns 200.
-  - Register + route + simulate arrival:
-    - `POST /vehicles` registers a vehicle
-    - simulation clock is stepped
-    - `GET /stats` eventually reports `VehiclesArrived >= 1`
-    - `GET /route` returns a valid path
-  - Emergency dispatch preempts signals:
-    - `POST /emergency`
-    - step simulation clock
-    - `GET /signals/0` reports `preempt=true` and a green phase
-- **Scenario + CLI** (`internal/scenario/scenario_test.go`, `internal/engine/engine_test.go`):
-  - Scenario load and validation (missing fields, bad types, non-contiguous IDs)
-  - Vehicle status read API (register, step, assert status fields)
-  - Single-vehicle arrival on a chain graph (manual clock steps until `VehicleStateArrived`)
-  - Emergency dispatch preempts signals (normal vehicle active, emergency dispatched, signal at intersection 0 reports `preempt=true`)
+Test suites:
+- **HTTP API** (`internal/httpapi/router_test.go`): health check, register+route+arrival, emergency preemption
+- **Engine** (`internal/engine/engine_test.go`): signal phase order, preemption forces green, 100-vehicle race safety, vehicle status, scenario arrival (chain graph), emergency preempt scenario
+- **Scenario** (`internal/scenario/scenario_test.go`): load + validate all formats (verbose, compact, grid, bidirectional), build, non-contiguous ID rejection
+- **Dijkstra** (`internal/dijkstra/dijkstra_test.go`): shortest path correctness on demo graph, same-node path
 
 ## Profiling
 
-CPU profile via pprof endpoint:
+Full profiling suite (PS section 6). All flame graphs, plots, and results in [`profiling/`](profiling/):
+
+| Requirement | File |
+|---|---|
+| CPU profile (Dijkstra) | `profiling/dijkstra_cpu_flame.svg` |
+| CPU profile (engine) | `profiling/engine_cpu_flame.svg` |
+| Memory profile (Dijkstra) | `profiling/dijkstra_mem_flame.svg` |
+| Memory profile (engine) | `profiling/engine_mem_flame.svg` |
+| Server heap | `profiling/memory_flame.svg` |
+| Goroutine profile | `profiling/goroutine_flame.svg` |
+| Block profile | `profiling/block_flame.svg` |
+| Dijkstra scaling (20/100/500) | `profiling/dijkstra_scaling.svg` |
+| Mutex vs RWMutex flame | `profiling/mutex_vs_rwmutex.svg` |
+| Mutex vs RWMutex bar charts | `profiling/mutex_1pct/5pct/10pct.svg` |
+| Summary | `profiling/README.md` |
+
+Generate live profile from running server:
 
 ```bash
 go run ./cmd/server
 go tool pprof -top http://localhost:8080/debug/pprof/profile?seconds=10
+go tool pprof -svg http://localhost:8080/debug/pprof/goroutine
 ```
 
 ## Original Problem Statement
@@ -242,11 +211,12 @@ go tool pprof -top http://localhost:8080/debug/pprof/profile?seconds=10
 - Identify top 5 most congested roads
 - Suggest alternative routes for congested paths
   f) REST API:
-  POST/vehicles→ Register vehicle
-  GET/route?from=A&to=B→ Calculate best routePOST/emergency→ Emergency vehicle dispatch
-  GET/congestion→ Current congestion heatmap data
-  GET/signals/:id→ Signal status at intersection
-  GET/stats→ System-wide statistics
+  POST /vehicles → Register vehicle
+  GET /route?from=A&to=B → Calculate best route
+  POST /emergency → Emergency vehicle dispatch
+  GET /congestion → Current congestion heatmap data
+  GET /signals/{id} → Signal status at intersection
+  GET /stats → System-wide statistics
 
 3. CONCURRENCY:
 

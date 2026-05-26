@@ -128,6 +128,7 @@ func LoadFile(path string) (*Scenario, error) {
 	if err := s.Validate(); err != nil {
 		return nil, err
 	}
+	sort.Slice(s.Events, func(i, j int) bool { return s.Events[i].Tick < s.Events[j].Tick })
 	return s, nil
 }
 
@@ -229,7 +230,7 @@ func appendBidirectional(roads []Road) []Road {
 	}
 	nextID := len(roads) + 1
 	for _, r := range roads {
-		if used[nextID] {
+		for used[nextID] {
 			nextID++
 		}
 		roads = append(roads, Road{
@@ -329,7 +330,6 @@ func (s *Scenario) Validate() error {
 		}
 	}
 
-	sort.Slice(s.Events, func(i, j int) bool { return s.Events[i].Tick < s.Events[j].Tick })
 	return nil
 }
 

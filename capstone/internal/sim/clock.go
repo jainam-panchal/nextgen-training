@@ -46,8 +46,6 @@ func NewRealClock(ctx context.Context, d time.Duration) *RealClock {
 
 func (r *RealClock) C() <-chan Tick { return r.c }
 
-func (r *RealClock) Stop() { r.stop() }
-
 // ManualClock emits ticks only when Step() is called. Used for deterministic tests.
 type ManualClock struct {
 	c chan Tick
@@ -67,5 +65,4 @@ func (m *ManualClock) Step() {
 	m.c <- Tick{N: m.n}
 }
 
-// Close closes the tick channel (signals the engine to stop).
-func (m *ManualClock) Close() { close(m.c) }
+

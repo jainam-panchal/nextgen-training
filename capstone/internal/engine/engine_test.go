@@ -124,10 +124,7 @@ func TestLoad100VehiclesRaceSafe(t *testing.T) {
 	// Give goroutines a moment to consume ticks.
 	time.Sleep(10 * time.Millisecond)
 
-	stats, err := e.Stats(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
+	stats := e.Stats(context.Background())
 	if stats.VehiclesTotal != 100 {
 		t.Fatalf("expected 100 vehicles, got %d", stats.VehiclesTotal)
 	}

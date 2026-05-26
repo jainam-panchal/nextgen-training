@@ -337,5 +337,7 @@ func printMap(b *scenario.Built, s *scenario.Scenario, path []int) {
 	if skipped > 0 {
 		fmt.Printf("Skipped %d non-axis-aligned road(s)\n", skipped)
 	}
-	fmt.Printf("S=%d  D=%d\n\n", path[0], path[len(path)-1])
+	if len(path) > 0 {
+		fmt.Printf("S=%d  D=%d\n\n", path[0], path[len(path)-1])
+	}
 }
