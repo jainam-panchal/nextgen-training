@@ -48,6 +48,12 @@ func rangeSize(n int, d densityConfig) uint64 {
 	return r
 }
 
+func bitArrayUsable(n int, d densityConfig) bool {
+	rs := rangeSize(n, d)
+	bitsetBytes := uint64(rs) / 8
+	return bitsetBytes <= 64*1024*1024
+}
+
 func makeKeys(n int, d densityConfig, contiguous bool) []uint32 {
 	rng := rand.New(rand.NewPCG(42, 42))
 	rs := rangeSize(n, d)
@@ -167,6 +173,20 @@ func BenchmarkBuild(b *testing.B) {
 						sink += int(s.Len())
 					}
 				})
+
+				b.Run(fmt.Sprintf("BitArraySet/%s/%s/n=%d", d.name, dist.name, n), func(b *testing.B) {
+					if !bitArrayUsable(n, d) {
+						b.Skip("bitset too large")
+					}
+					b.ReportAllocs()
+					for i := 0; i < b.N; i++ {
+						s := NewBitArraySet()
+						for _, k := range keys {
+							s.Add(k)
+						}
+						sink += int(s.Len())
+					}
+				})
 			}
 		}
 	}
@@ -199,6 +219,28 @@ func BenchmarkLookupHit(b *testing.B) {
 
 				b.Run(fmt.Sprintf("RoaringSet/%s/%s/n=%d", d.name, dist.name, n), func(b *testing.B) {
 					s := NewRoaringSet()
+					for _, k := range keys {
+						s.Add(k)
+					}
+					b.ReportAllocs()
+					b.ResetTimer()
+					keyIndex := 0
+					for i := 0; i < b.N; i++ {
+						if s.Contains(keys[keyIndex]) {
+							sink++
+						}
+						keyIndex++
+						if keyIndex >= len(keys) {
+							keyIndex = 0
+						}
+					}
+				})
+
+				b.Run(fmt.Sprintf("BitArraySet/%s/%s/n=%d", d.name, dist.name, n), func(b *testing.B) {
+					if !bitArrayUsable(n, d) {
+						b.Skip("bitset too large")
+					}
+					s := NewBitArraySet()
 					for _, k := range keys {
 						s.Add(k)
 					}
@@ -284,6 +326,28 @@ func BenchmarkLookupMiss(b *testing.B) {
 						}
 					}
 				})
+
+				b.Run(fmt.Sprintf("BitArraySet/%s/%s/n=%d", d.name, dist.name, n), func(b *testing.B) {
+					if !bitArrayUsable(n, d) {
+						b.Skip("bitset too large")
+					}
+					s := NewBitArraySet()
+					for _, k := range memberKeys {
+						s.Add(k)
+					}
+					b.ReportAllocs()
+					b.ResetTimer()
+					keyIndex := 0
+					for i := 0; i < b.N; i++ {
+						if s.Contains(missKeys[keyIndex]) {
+							sink++
+						}
+						keyIndex++
+						if keyIndex >= len(missKeys) {
+							keyIndex = 0
+						}
+					}
+				})
 			}
 		}
 	}
@@ -324,6 +388,24 @@ func BenchmarkIterate(b *testing.B) {
 						})
 					}
 				})
+
+				b.Run(fmt.Sprintf("BitArraySet/%s/%s/n=%d", d.name, dist.name, n), func(b *testing.B) {
+					if !bitArrayUsable(n, d) {
+						b.Skip("bitset too large")
+					}
+					s := NewBitArraySet()
+					for _, k := range keys {
+						s.Add(k)
+					}
+					b.ReportAllocs()
+					b.ResetTimer()
+					for i := 0; i < b.N; i++ {
+						s.Iterate(func(x uint32) bool {
+							iterSink += x
+							return true
+						})
+					}
+				})
 			}
 		}
 	}
@@ -334,8 +416,6 @@ func BenchmarkUnion(b *testing.B) {
 		for _, d := range densities {
 			for _, dist := range dists {
 				shared, onlyA, onlyB, _, _ := makeOverlappingSets(n, d, dist)
-				_ = onlyA
-				_ = onlyB
 
 				goA := NewGoSet()
 				for _, k := range shared {
@@ -367,6 +447,21 @@ func BenchmarkUnion(b *testing.B) {
 					rbB.Add(k)
 				}
 
+				baA := NewBitArraySet()
+				for _, k := range shared {
+					baA.Add(k)
+				}
+				for _, k := range onlyA {
+					baA.Add(k)
+				}
+				baB := NewBitArraySet()
+				for _, k := range shared {
+					baB.Add(k)
+				}
+				for _, k := range onlyB {
+					baB.Add(k)
+				}
+
 				b.Run(fmt.Sprintf("GoSet/%s/%s/n=%d", d.name, dist.name, n), func(b *testing.B) {
 					b.ReportAllocs()
 					for i := 0; i < b.N; i++ {
@@ -386,6 +481,17 @@ func BenchmarkUnion(b *testing.B) {
 					for i := 0; i < b.N; i++ {
 						u := roaring.Or(rbA.b, rbB.b)
 						sink += int(u.GetCardinality())
+					}
+				})
+
+				b.Run(fmt.Sprintf("BitArraySet/%s/%s/n=%d", d.name, dist.name, n), func(b *testing.B) {
+					if !bitArrayUsable(n, d) {
+						b.Skip("bitset too large")
+					}
+					b.ReportAllocs()
+					for i := 0; i < b.N; i++ {
+						u := bitArrayUnion(baA, baB)
+						sink += int(u.Len())
 					}
 				})
 			}
@@ -429,6 +535,21 @@ func BenchmarkIntersection(b *testing.B) {
 					rbB.Add(k)
 				}
 
+				baA := NewBitArraySet()
+				for _, k := range shared {
+					baA.Add(k)
+				}
+				for _, k := range onlyA {
+					baA.Add(k)
+				}
+				baB := NewBitArraySet()
+				for _, k := range shared {
+					baB.Add(k)
+				}
+				for _, k := range onlyB {
+					baB.Add(k)
+				}
+
 				b.Run(fmt.Sprintf("GoSet/%s/%s/n=%d", d.name, dist.name, n), func(b *testing.B) {
 					b.ReportAllocs()
 					for i := 0; i < b.N; i++ {
@@ -447,6 +568,17 @@ func BenchmarkIntersection(b *testing.B) {
 					for i := 0; i < b.N; i++ {
 						inter := roaring.And(rbA.b, rbB.b)
 						sink += int(inter.GetCardinality())
+					}
+				})
+
+				b.Run(fmt.Sprintf("BitArraySet/%s/%s/n=%d", d.name, dist.name, n), func(b *testing.B) {
+					if !bitArrayUsable(n, d) {
+						b.Skip("bitset too large")
+					}
+					b.ReportAllocs()
+					for i := 0; i < b.N; i++ {
+						inter := bitArrayIntersection(baA, baB)
+						sink += int(inter.Len())
 					}
 				})
 			}
@@ -481,6 +613,25 @@ func BenchmarkDelete(b *testing.B) {
 					for i := 0; i < b.N; i++ {
 						b.StopTimer()
 						s := NewRoaringSet()
+						for _, k := range keys {
+							s.Add(k)
+						}
+						b.StartTimer()
+						for _, k := range keys {
+							s.Remove(k)
+						}
+						sink += int(s.Len())
+					}
+				})
+
+				b.Run(fmt.Sprintf("BitArraySet/%s/%s/n=%d", d.name, dist.name, n), func(b *testing.B) {
+					if !bitArrayUsable(n, d) {
+						b.Skip("bitset too large")
+					}
+					b.ReportAllocs()
+					for i := 0; i < b.N; i++ {
+						b.StopTimer()
+						s := NewBitArraySet()
 						for _, k := range keys {
 							s.Add(k)
 						}
@@ -532,6 +683,30 @@ func BenchmarkMemory(b *testing.B) {
 						runtime.ReadMemStats(&m1)
 
 						s := NewRoaringSet()
+						for _, k := range keys {
+							s.Add(k)
+						}
+						sink += int(s.Len())
+
+						var m2 runtime.MemStats
+						runtime.ReadMemStats(&m2)
+						totalBytes += m2.Alloc - m1.Alloc
+					}
+					b.ReportMetric(float64(totalBytes)/float64(b.N), "heapdelta/B")
+				})
+
+				b.Run(fmt.Sprintf("BitArraySet/%s/%s/n=%d", d.name, dist.name, n), func(b *testing.B) {
+					if !bitArrayUsable(n, d) {
+						b.Skip("bitset too large")
+					}
+					b.ReportAllocs()
+					var totalBytes uint64
+					for i := 0; i < b.N; i++ {
+						runtime.GC()
+						var m1 runtime.MemStats
+						runtime.ReadMemStats(&m1)
+
+						s := NewBitArraySet()
 						for _, k := range keys {
 							s.Add(k)
 						}
