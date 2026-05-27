@@ -184,8 +184,11 @@ func BenchmarkRandomAccess(b *testing.B) {
 
 		indices := make([]int, n)
 		for i := range indices {
-			indices[i] = n - 1 - i
+			indices[i] = i
 		}
+		rand.Shuffle(n, func(i, j int) {
+			indices[i], indices[j] = indices[j], indices[i]
+		})
 
 		b.Run(fmt.Sprintf("Slice/n=%d", n), func(b *testing.B) {
 			b.ReportAllocs()
@@ -244,9 +247,12 @@ func BenchmarkInsertFront(b *testing.B) {
 	}
 }
 
-// -------- benchmark: delete from front --------
+// -------- benchmark: build and drain from front --------
+// Measures full cycle: build structure of size n, then delete all from front.
+// Pure delete-from-front is trivially fast for both (O(1) pointer bump),
+// so the meaningful comparison is the whole build+drain workload.
 
-func BenchmarkDeleteFront(b *testing.B) {
+func BenchmarkBuildAndDrain(b *testing.B) {
 	for _, n := range ns {
 		vals := make([]int, n)
 		for i := range vals {
@@ -287,12 +293,14 @@ func BenchmarkRandomInsert(b *testing.B) {
 	for _, n := range ns {
 		b.Run(fmt.Sprintf("Slice/n=%d", n), func(b *testing.B) {
 			b.ReportAllocs()
+			src := rand.NewPCG(42, 42)
+			rng := rand.New(src)
 			for i := 0; i < b.N; i++ {
 				s := make([]int, n)
 				for j := range s {
 					s[j] = j
 				}
-				rng := rand.New(rand.NewPCG(42, 42))
+				src.Seed(42, 42)
 				for j := 0; j < n; j++ {
 					pos := rng.IntN(len(s) + 1)
 					s = append(s, 0)
@@ -305,12 +313,14 @@ func BenchmarkRandomInsert(b *testing.B) {
 
 		b.Run(fmt.Sprintf("LinkedList/n=%d", n), func(b *testing.B) {
 			b.ReportAllocs()
+			src := rand.NewPCG(42, 42)
+			rng := rand.New(src)
 			for i := 0; i < b.N; i++ {
 				l := newList()
 				for j := 0; j < n; j++ {
 					l.append(j)
 				}
-				rng := rand.New(rand.NewPCG(42, 42))
+				src.Seed(42, 42)
 				for j := 0; j < n; j++ {
 					pos := rng.IntN(l.len + 1)
 					l.insertAt(pos, -1)
