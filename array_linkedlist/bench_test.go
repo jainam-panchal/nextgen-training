@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"math/rand/v2"
 	"testing"
 )
 
@@ -69,6 +70,23 @@ func (l *List) iterate(fn func(int)) {
 	for p := l.head; p != nil; p = p.next {
 		fn(p.val)
 	}
+}
+
+func (l *List) insertAt(idx int, val int) {
+	if idx <= 0 {
+		l.prepend(val)
+		return
+	}
+	if idx >= l.len {
+		l.append(val)
+		return
+	}
+	p := l.head
+	for i := 0; i < idx-1; i++ {
+		p = p.next
+	}
+	p.next = &Node{val: val, next: p.next}
+	l.len++
 }
 
 // -------- sink --------
@@ -256,6 +274,46 @@ func BenchmarkDeleteFront(b *testing.B) {
 				}
 				for l.head != nil {
 					l.deleteFront()
+				}
+				sink += l.len
+			}
+		})
+	}
+}
+
+// -------- benchmark: insert at random positions --------
+
+func BenchmarkRandomInsert(b *testing.B) {
+	for _, n := range ns {
+		b.Run(fmt.Sprintf("Slice/n=%d", n), func(b *testing.B) {
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				s := make([]int, n)
+				for j := range s {
+					s[j] = j
+				}
+				rng := rand.New(rand.NewPCG(42, 42))
+				for j := 0; j < n; j++ {
+					pos := rng.IntN(len(s) + 1)
+					s = append(s, 0)
+					copy(s[pos+1:], s[pos:])
+					s[pos] = -1
+				}
+				sink += len(s)
+			}
+		})
+
+		b.Run(fmt.Sprintf("LinkedList/n=%d", n), func(b *testing.B) {
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				l := newList()
+				for j := 0; j < n; j++ {
+					l.append(j)
+				}
+				rng := rand.New(rand.NewPCG(42, 42))
+				for j := 0; j < n; j++ {
+					pos := rng.IntN(l.len + 1)
+					l.insertAt(pos, -1)
 				}
 				sink += l.len
 			}

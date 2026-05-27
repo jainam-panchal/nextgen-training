@@ -72,6 +72,24 @@ This is the most dramatic gap. Slice's O(1) indexed access vs linked list's O(n)
 
 Go's slice re-slicing (`s = s[1:]`) is O(1) — just moves the start pointer. No data movement. The linked list also does O(1) pointer swaps, but **building** the list costs n allocations vs the slice's 1, which dominates wall time.
 
+### Random Insert (insert n elements at random positions into a structure of size n)
+
+| n | Slice | Linked List | Ratio |
+|---|---|---|---|
+| 10 | 350 ns/op (256 B, 3 allocs) | 1,323 ns/op (336 B, 21 allocs) | **3.8× slice** |
+| 100 | 4,392 ns/op (2,704 B, 3 allocs) | 31,546 ns/op (3,216 B, 201 allocs) | **7.2× slice** |
+| 1,000 | 159,576 ns/op (38,928 B, 4 allocs) | 1,208,631 ns/op (32,016 B, 2,001 allocs) | **7.6× slice** |
+| 10,000 | 11,834,985 ns/op (507,922 B, 5 allocs) | 135,025,930 ns/op (320,016 B, 20,001 allocs) | **11.4× slice** |
+| 100,000 | 3,487,910,198 ns/op (6,635,536 B, 6 allocs) | 25,291,489,028 ns/op (3,200,016 B, 200,001 allocs) | **7.2× slice** |
+
+Both are O(n²) — slice shifts elements via memmove, linked list pointer-chases to find the insertion point each time. **But the slice is 4–11× faster** because:
+
+- **memmove is cache-friendly linear copy** (prefetcher pulls in cache lines ahead)
+- **Linked list traversal is pointer chasing** — random-address heap dereferences miss L1/L2/L3 and hit DRAM (~60–100 ns per miss)
+- **Slice does 6 allocs total** (backing array grows geometrically) vs **linked list does n allocs** for build + n allocs for inserts = 200k allocs at n=100k
+
+The hardware prefetcher makes memmove look cheap even though both are theoretically O(n²).
+
 ### Prepend-Build (build by repeatedly inserting at front)
 
 | n | Slice | Linked List | Ratio |
@@ -87,15 +105,16 @@ Same as Insert Front but builds from scratch. Slice's O(n²) behavior produces a
 ## Summary
 
 | Benchmark | Small n (10) | Large n (100k) | Winner |
-|---|---|---|---|
+|---|---|---|---|---|
 | Append (tail) | 7.3× slice | 20× slice | **Slice** |
 | Sequential iterate | 1.5× slice | 3.6× slice | **Slice** |
 | Random access | 9.3× slice | **136,345×** slice | **Slice** |
+| Random insert | 3.8× slice | 7.2× slice | **Slice** |
 | Insert front | 1.5× list | 2,519× list | **Linked list** |
 | Delete front | 8× slice | 14× slice | **Slice** |
 | Prepend-build | 1.6× list | 2,869× list | **Linked list** |
 
-**Arrays win 4/6 benchmarks. Linked list wins 2/6 (front-insertion variants).**
+**Arrays win 5/7 benchmarks. Linked list wins 2/7 (front-insertion variants).**
 
 ## Verdict on Hypothesis
 
